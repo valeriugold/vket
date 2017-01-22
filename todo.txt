@@ -1,0 +1,42 @@
+services:
+upload files (where? for what event?)
+download
+
+1 skeleton with auth
+2 upload files
+3 show file list
+3 download files
+
+register
+login
+see login page
+logout
+
+
+DB:
+table user:
+id
+first name
+last name
+email
+type: admin, user, editor
+created_at
+updated_at
+
+
+user_file:
+id
+name
+user_id
+created_at
+updated_at
+stored_file_id
+
+stored_file:
+id
+name
+created_at
+updated_at
+size
+md5sum
+ref_count

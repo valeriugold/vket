@@ -1,0 +1,16 @@
+// allow comments starting with //
+{
+    // logging configuration
+    "log" : {
+        // priority can be: Trace|Info|Warning|Error
+        "priority" : "Trace",
+        // dest is std for stout and stderr, or a specific file
+        "destination" : "std"
+    },
+    // server configuration data
+    "server" : {
+        "port" : 9090,
+        // location of static files, for now only for bootstrap
+        "static" : "bootstrap-3.3.7-dist"
+    }
+}
