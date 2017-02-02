@@ -16,13 +16,14 @@ import (
 	"github.com/gorilla/sessions"
 	"github.com/justinas/alice"
 	"github.com/valeriugold/vket/shared/database"
+	"github.com/valeriugold/vket/shared/jsonconfig"
+	"github.com/valeriugold/vket/vfiles"
 	"github.com/valeriugold/vket/vlog"
 	model "github.com/valeriugold/vket/vmodel"
 	"github.com/valeriugold/vket/vviews"
 )
 
 var store = sessions.NewCookieStore([]byte("secret-project"))
-var config configuration
 
 // config the settings variable
 var config = &configuration{}
@@ -33,8 +34,9 @@ type configuration struct {
 	// Email     email.SMTPInfo  `json:"Email"`
 	// Recaptcha recaptcha.Info  `json:"Recaptcha"`
 	// Server   server.Server   `json:"Server"`
-	Server Configuration      `json:"Server"`
-	Log    vlog.Configuration `json:"Log"`
+	Server Configuration        `json:"Server"`
+	Log    vlog.Configuration   `json:"Log"`
+	VFiles vfiles.Configuration `json:"VFiles"`
 	// Session  session.Session `json:"Session"`
 	// Template view.Template   `json:"Template"`
 	// View     view.View       `json:"View"`
@@ -51,19 +53,12 @@ type Configuration struct {
 }
 
 // configuration values for the server
-var server = &config.Server
+var serverConfig Configuration
 
-// InitConfiguration: parse config section and apply the configuration
-func InitConfiguration(jb []byte) {
-	var s section
-	s.Section = &config
-	// default values
-	config.Port = 9090
-	err := json.Unmarshal(jb, &s)
-	if err != nil {
-		log.Fatal("Config Parse Error:", err)
-	}
-	log.Printf("server: %v\n", config)
+// InitConfiguration: copy configuration to local config variable
+func InitConfiguration(c Configuration) {
+	serverConfig = c
+	log.Printf("server: %v\n", serverConfig)
 }
 
 func loggingSetter(out io.Writer) func(http.Handler) http.Handler {
@@ -93,17 +88,13 @@ func main() {
 	// Load the configuration file
 	jsonconfig.Load(configFile, config)
 
-	confBytes := loadConfiguration(configFile)
-	config.ParseJSON(b []byte)
-	
-	InitConfiguration(confBytes)
-	vlog.InitConfiguration(confBytes)
-	// os.Exit(0)
-	// vlog.Init(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
+	vlog.InitConfiguration(config.Log)
 
 	vlog.Trace.Println("Start logging trace")
 	vlog.Warning.Printf("This is a warning")
 
+	// configure http server
+	InitConfiguration(config.Server)
 	// Connect to database
 	database.Connect(config.Database)
 
@@ -112,14 +103,16 @@ func main() {
 
 	//static file handler
 	// http.Handle("/bootstrap/", http.StripPrefix("/bootstrap/", http.FileServer(http.Dir("bootstrap-3.3.7-dist"))))
-	http.Handle("/bootstrap/", http.StripPrefix("/bootstrap/", http.FileServer(http.Dir(config.Static))))
+	http.Handle("/bootstrap/", http.StripPrefix("/bootstrap/", http.FileServer(http.Dir(serverConfig.Static))))
 	http.Handle("/login", stdChain.ThenFunc(LoginALL))
 	http.Handle("/register", stdChain.ThenFunc(RegisterALL))
 	http.Handle("/about", stdChain.ThenFunc(AboutGET))
 	http.Handle("/hello", stdChain.ThenFunc(HelloGET))
 	http.Handle("/uploadmovies", stdChain.ThenFunc(UploadMoviesALL))
 	http.Handle("/logout", stdChain.ThenFunc(LogoutGET))
-	err := http.ListenAndServe(":"+strconv.Itoa(config.Port), context.ClearHandler(http.DefaultServeMux))
+	http.Handle("/exitNow", stdChain.ThenFunc(ExitNowGET))
+
+	err := http.ListenAndServe(":"+strconv.Itoa(serverConfig.Port), context.ClearHandler(http.DefaultServeMux))
 	// err := http.ListenAndServe(":9090", context.ClearHandler(http.DefaultServeMux))
 	if err != nil {
 		vlog.Error.Fatal("ListenAndServe: ", err)
@@ -153,7 +146,6 @@ func HelloGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.Save(r, w)
-	vviews.Hello(w, s.Values["email"].(string), s.Values["role"].(string))
 	email := s.Values["email"].(string)
 	user, err := model.UserByEmail(email)
 	if err != nil {
@@ -161,6 +153,7 @@ func HelloGET(w http.ResponseWriter, r *http.Request) {
 	} else {
 		vlog.Trace.Printf("user email %s = %v", email, user)
 	}
+	vviews.Hello(w, strconv.Itoa(s.Values["email"].(uint32)), s.Values["email"].(string), user.Email, s.Values["role"].(string), user.Role, user.FirstName, user.LastName, user.Password, user.ID)
 }
 
 func UploadMoviesALL(w http.ResponseWriter, r *http.Request) {
@@ -188,43 +181,31 @@ func UploadMoviesGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadMoviesPOST(w http.ResponseWriter, r *http.Request) {
+	s, err := getAuthenticatedSession(w, r)
+	if err != nil {
+		return
+	}
+	ID := s.Values["ID"].(uint32)
+
 	//get the multipart reader for the request.
 	reader, err := r.MultipartReader()
-
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	//copy each part to destination.
-	for {
-		part, err := reader.NextPart()
-		if err == io.EOF {
-			break
-		}
-
-		//if part.FileName() is empty, skip this iteration.
-		if part.FileName() == "" {
-			continue
-		}
-		vlog.Trace.Printf("file: %s\n", part.FileName())
-		dst, err := os.Create("/tmp/" + part.FileName())
-		defer dst.Close()
-
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		if _, err := io.Copy(dst, part); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
+	if err = vfiles.SaveMultipart(ID, reader); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
 	}
 
 	vlog.Trace.Printf("success!\n")
 	//display success message.
 	vviews.Hello(w, "upload", "successful")
+}
+
+func ExitNowGET(w http.ResponseWriter, r *http.Request) {
+	os.Exit(0)
 }
 
 func LogoutGET(w http.ResponseWriter, r *http.Request) {
@@ -276,6 +257,7 @@ func LoginPOST(w http.ResponseWriter, r *http.Request) {
 	s.Values["role"] = user.Role
 	s.Values["firstName"] = user.FirstName
 	s.Values["lastName"] = user.LastName
+	s.Values["ID"] = user.ID
 	s.Save(r, w)
 	http.Redirect(w, r, "/hello", http.StatusFound)
 }

@@ -3,6 +3,7 @@ package model
 import (
 	"database/sql"
 	"errors"
+	"strings"
 
 	"gopkg.in/mgo.v2"
 )
@@ -26,3 +27,18 @@ func standardizeError(err error) error {
 
 	return err
 }
+
+// IsDuplicateEntry returns true if the error os "Duplicate entry"
+func IsDuplicateEntry(err error) bool {
+	// ERROR 1062 (23000): Duplicate entry 'bbb@aaa.aaa' for key 'email'
+	if strings.Contains(err.Error(), "Duplicate entry") {
+		return true
+	}
+	return false
+}
+
+// if driverErr, ok := err.(*mysql.MySQLError); ok { // Now the error number is accessible directly
+// 	if driverErr.Number == 1045 {
+// 		// Handle the permission-denied error
+// 	}
+// }

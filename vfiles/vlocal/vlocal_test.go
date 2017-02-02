@@ -39,6 +39,24 @@ func getMd5FromFile(t *testing.T, s string) ([md5.Size]byte, error) {
 	return a, nil
 }
 
+func createRandomFile(t *testing.T, testLocalFile string) {
+	if err := os.Remove(testLocalFile); err != nil {
+		t.Log("ignore error " + err.Error())
+	}
+	// in, err := os.Open(testLocalFile)
+	in, err := os.Create(testLocalFile)
+	if err != nil {
+		t.Error("could not create local file " + testLocalFile + " err: " + err.Error())
+	}
+	// t.Log("write file now!!!!!!!")
+	if n, err := in.Write(RandBytes(1024)); err != nil {
+		t.Error("error writing to file %s: %v", testLocalFile, err)
+	} else {
+		t.Logf("wrote %d fo file %s\n", n, testLocalFile)
+	}
+	in.Close()
+}
+
 func TestLocal(t *testing.T) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	testDirLocal := "/tmp/vfiles_test_local"
@@ -52,26 +70,12 @@ func TestLocal(t *testing.T) {
 	if err := os.MkdirAll(testDirRemote, 0777); err != nil {
 		t.Error("could not create remote dir " + testDirRemote)
 	}
-	if err := os.Remove(testLocalFile); err != nil {
-		t.Log("ignore error " + err.Error())
-	}
-	// in, err := os.Open(testLocalFile)
-	in, err := os.Create(testLocalFile)
-	if err != nil {
-		t.Error("could not create local file " + testLocalFile + " err: " + err.Error())
-	}
-	// t.Log("write file now!!!!!!!")
-	if n, err := in.Write(RandBytes(1024)); err != nil {
-		t.Error("error writing to file %s: %v", err)
-	} else {
-		t.Logf("wrote %d fo file %s\n", n, testLocalFile)
-	}
-	in.Close()
+	createRandomFile(t, testLocalFile)
 
 	t.Logf("save %s to %s, in dir %s", testLocalFile, testRemoteName, testDirRemote)
 	x := VFilesLocal{testDirRemote}
-	if err = x.FileSave(testLocalFile, testRemoteName); err != nil {
-		t.Error("FileSave(%s, %s) returned error %v", testLocalFile, testRemoteName, err)
+	if err = x.Save(testLocalFile, testRemoteName); err != nil {
+		t.Error("Save(%s, %s) returned error %v", testLocalFile, testRemoteName, err)
 	}
 	t.Logf("created x with %s", x.dir)
 
@@ -84,7 +88,7 @@ func TestLocal(t *testing.T) {
 
 	// get the file
 	testLocalGetFile := testDirLocal + "/gotfile1.txt"
-	if err = x.FileGet(testLocalGetFile, testRemoteName); err != nil {
+	if err = x.Load(testLocalGetFile, testRemoteName); err != nil {
 		t.Error("could not get testRemoteName %s to %s, err=%v", testRemoteName, testLocalGetFile, err)
 	}
 
@@ -97,7 +101,7 @@ func TestLocal(t *testing.T) {
 	}
 
 	// delete remote
-	if err = x.FileRemove(testRemoteName); err != nil {
+	if err = x.Remove(testRemoteName); err != nil {
 		t.Error("could not remove testRemoteName %s, err=%v", testRemoteName, err)
 	}
 }

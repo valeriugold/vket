@@ -9,6 +9,18 @@ import (
 	"github.com/valeriugold/vket/vlog"
 )
 
+// elements from bootstrap navbar, <href=Name>Display<>
+type navItem struct {
+	Name    string
+	Display string
+}
+
+// for active element Active=Name, Navbar holds all the elements in navbar for current view
+type nav struct {
+	Active string
+	Navbar []navItem
+}
+
 // load templates
 // define generic json printing functions
 // define how functions interract
@@ -22,8 +34,16 @@ var dir = "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/vviews/vtempla
 // Init should be called automatically when this package is used
 func Init() {
 	names := []string{"about", "error", "hello", "vuploadmovie", "login", "register"}
-	for _, n := range names {
-		views[n] = CreateView(n, nameOfBaseTmpl, n)
+	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register"}
+	navItems := []navItem{{"about", "About"},
+		{"login", "Login"},
+		{"register", "Register"},
+		{"hello", "Hello"},
+		{"uploadmovies", "UploadMovies"},
+		{"logout", "Logout"},
+		{"exitNow", "Exit"}}
+	for i, n := range names {
+		views[n] = CreateView(n, nameOfBaseTmpl, []string{n}, navActives[i], navItems)
 	}
 }
 
@@ -37,25 +57,31 @@ func GetJSONRepresentation(args ...interface{}) string {
 	return string(b)
 }
 
+// View defines a view, including the template files names and navbar
 type View struct {
 	name     string
 	base     string
 	files    []string
+	navData  nav
 	template *template.Template
 }
 
-func CreateView(name string, baseName string, files ...string) *View {
+func CreateView(name string, baseName string, files []string, navActive string, navItems []navItem) *View {
 	fls := []string{baseName + ".tmpl"}
 	for _, f := range files {
 		fls = append(fls, f+".tmpl")
 	}
-	v := &View{name: name, base: baseName, files: fls}
+	v := &View{name: name, base: baseName, files: fls, navData: nav{Active: navActive, Navbar: navItems}}
 	v.Init()
 	return v
 }
 func UseTemplate(w http.ResponseWriter, name string, data interface{}) {
 	if v, ok := views[name]; ok {
-		v.Render(w, data)
+		d := struct {
+			Nav  nav
+			Data interface{}
+		}{v.navData, data}
+		v.Render(w, d)
 		return
 	}
 	// http.Error(w, "Did not find template name for data: %v", data)

@@ -1,29 +1,19 @@
 package vlog
 
 import (
-	"encoding/json"
 	"io"
 	"log"
 	"os"
 )
 
-type section struct {
-	Section *configuration `json:"log"`
-}
-type configuration struct {
+type Configuration struct {
 	Priority    string `json:"priority"`
 	Destination string `json:"destination"`
 }
 
-// parse config section and apply the configuration
-func InitConfiguration(jb []byte) {
-	var s section
-	s.Section = &config
-	err := json.Unmarshal(jb, &s)
-	if err != nil {
-		log.Fatal("Config Parse Error:", err)
-	}
-	log.Printf("log: %v\n", config)
+// InitConfiguration copy configuration to local config variable and init the system
+func InitConfiguration(c Configuration) {
+	config = c
 	if len(config.Destination) < 2 || config.Destination == "std" {
 		// vlog.Init(ioutil.Discard, os.Stdout, os.Stdout, os.Stderr)
 		Init(os.Stdout, os.Stdout, os.Stdout, os.Stderr)
@@ -35,10 +25,12 @@ func InitConfiguration(jb []byte) {
 		}
 		Init(file, file, file, file)
 	}
+
+	log.Printf("log: %v\n", config)
 }
 
 var (
-	config  configuration
+	config  Configuration
 	Trace   *log.Logger
 	Info    *log.Logger
 	Warning *log.Logger

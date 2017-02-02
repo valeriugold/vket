@@ -1,6 +1,7 @@
 package jsonconfig
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,6 +28,8 @@ func Load(configFile string, p Parser) {
 	if err != nil {
 		log.Fatalln(err)
 	}
+
+	fmt.Printf("before filtering out comments: %v\n", jsonBytes)
 
 	var reComments = regexp.MustCompile(`(?m)^\s*//.*$\n?`)
 	b := reComments.ReplaceAll(jsonBytes, []byte{})

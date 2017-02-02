@@ -1,7 +1,6 @@
 package vlocal
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,27 +12,14 @@ type VFilesLocal struct {
 	dir string
 }
 
-type section struct {
-	Section *parameters `json:"vfiles"`
-}
-type parameters struct {
-	Parameters *configuration `json:"params"`
-}
-type configuration struct {
+var config Configuration
+
+type Configuration struct {
 	DestDir string `json:"destDir"`
 }
 
-func InitConfiguration(jb []byte) *VFilesLocal {
-	var c configuration
-	var p parameters
-	var s section
-	p.Parameters = &c
-	s.Section = &p
-	err := json.Unmarshal(jb, &s)
-	if err != nil {
-		log.Fatal("Config Parse Error:", err)
-	}
-	log.Printf("vfiles: %v\n", c)
+func InitConfiguration(c Configuration) *VFilesLocal {
+	config = c
 	if len(c.DestDir) < 2 {
 		log.Fatalln("invalid DestDir=" + c.DestDir)
 	}
@@ -49,22 +35,33 @@ func (x VFilesLocal) Init() {
 	}
 }
 
-// saves the file nameLocal to dir/nameBox
-func (x VFilesLocal) FileSave(nameLocal, nameBox string) error {
+// implementing the vfiles.SaveLoader interface
+// Save saves the file nameLocal to dir/nameBox
+func (x VFilesLocal) Save(nameLocal, nameBox string) error {
 	fstore := x.dir + "/" + nameBox
 	return CopyFile(nameLocal, fstore)
 }
-func (x VFilesLocal) FileGet(nameLocal, nameBox string) error {
+
+// Load copies the file dir/nameBox to nameLocal
+func (x VFilesLocal) Load(nameLocal, nameBox string) error {
 	fstore := x.dir + "/" + nameBox
 	return CopyFile(fstore, nameLocal)
 }
-func (x VFilesLocal) FileRemove(nameBox string) error {
+
+// Remove file from dir/
+func (x VFilesLocal) Remove(nameBox string) error {
 	fstore := x.dir + "/" + nameBox
 	return os.Remove(fstore)
 }
 
-// store in DB key -> file
-// db table
+// DoesExist returns true if file exists in dir/
+func (x VFilesLocal) DoesExist(nameBox string) bool {
+	fstore := x.dir + "/" + nameBox
+	if _, err := os.Stat(fstore); os.IsNotExist(err) {
+		return false
+	}
+	return true
+}
 
 // CopyFile copies a file from src to dst. If src and dst files exist, and are
 // the same, then return success. Otherise, attempt to create a hard link

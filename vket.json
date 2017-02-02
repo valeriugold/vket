@@ -1,16 +1,34 @@
 // allow comments starting with //
 {
     // logging configuration
-    "log" : {
+    "Log" : {
         // priority can be: Trace|Info|Warning|Error
         "priority" : "Trace",
         // dest is std for stout and stderr, or a specific file
         "destination" : "std"
     },
     // server configuration data
-    "server" : {
+    "Server" : {
         "port" : 9090,
         // location of static files, for now only for bootstrap
         "static" : "bootstrap-3.3.7-dist"
+    },
+    "Database": {
+	"Type": "MySQL",
+	"Bolt": {		
+ 	    "Path": "vket.db"
+  	},
+	"MongoDB": {
+	    "URL": "127.0.0.1",
+	    "Database": "vket"
+	},
+	"MySQL": {
+	    "Username": "valeriug",
+	    "Password": "tset",
+	    "Name": "vket",
+	    "Hostname": "127.0.0.1",
+	    "Port": 3306,
+	    "Parameter": "?parseTime=true"
+	}
     }
 }

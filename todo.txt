@@ -13,30 +13,45 @@ see login page
 logout
 
 
-DB:
-table user:
-id
-first name
-last name
-email
-type: admin, user, editor
-created_at
-updated_at
+- define first prototype: what features will it have:
+  - no events
+  - no S3
+  - show files / user
+  - download files one by one
+  - remove files
+  - watch files?
+
+first prototype:
+1
+create user
+upload files: store original name,size,md5sum
+show files, original name, original size, original md5sum, stored name, stored size, stored md5sum
+delete files
+download files
+when files are uploaded, they are stored locally
+
+2 save on S3
+
+3 download files bundled together
+
+4 transcode files
+
+5 create events, associate files with events
+
+6 use different roles for upload/download
 
 
-user_file:
-id
-name
-user_id
-created_at
-updated_at
-stored_file_id
+todo now:
+upload files: store original name,size,md5sum
+show files
+delete files
 
-stored_file:
-id
-name
-created_at
-updated_at
-size
-md5sum
-ref_count
+
+
+- organize files per user/ event
+- show current files
+- there will be a intermediary func for transcoding, the final files will be stored transcoded to a common format... or not?
+- modify DB and code to allow soring originalMd5sum (in user_file) before file gets transcoded
+- the final file might be generated at a later time, long after the http req was returned
+
+- analyze the option of uploading directly to S3

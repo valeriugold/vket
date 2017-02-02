@@ -5,8 +5,12 @@ import (
 	"io"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/valeriugold/vket/vfiles/vlocal"
+	model "github.com/valeriugold/vket/vmodel"
 )
 
 const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -39,17 +43,7 @@ func getMd5FromFile(t *testing.T, s string) ([md5.Size]byte, error) {
 	return a, nil
 }
 
-const config = `{ "vfiles" : { "storageType" : "local", "params" : { "destDir" : "/tmp/vfiles_test_local" } } }`
-
-func TestLocal(t *testing.T) {
-	rand.Seed(time.Now().UTC().UnixNano())
-	testDirLocal := "/tmp/vfiles_test_local"
-	testLocalFile := testDirLocal + "/local1.txt"
-	testRemoteName := "local1r.txt"
-	// create local file
-	if err := os.MkdirAll(testDirLocal, 0777); err != nil {
-		t.Error("could not create local dir " + testDirLocal)
-	}
+func createRandomFile(t *testing.T, testLocalFile string) {
 	if err := os.Remove(testLocalFile); err != nil {
 		t.Log("ignore error " + err.Error())
 	}
@@ -65,6 +59,52 @@ func TestLocal(t *testing.T) {
 		t.Logf("wrote %d fo file %s\n", n, testLocalFile)
 	}
 	in.Close()
+}
+
+const config = `{ "vfiles" : { "storageType" : "local", "params" : { "destDir" : "/tmp/vfiles_test_local" } } }`
+
+func TestVfiles(t *testing.T) {
+	c := Configuration{Type: "vlocal", VLocal: vlocal.Configuration{DestDir: "/tmp/vfiles_test_local"}}
+	InitConfiguration(c)
+
+}
+
+func TestLocal(t *testing.T) {
+	rand.Seed(time.Now().UTC().UnixNano())
+	testDirLocal := "/tmp/vfiles_test_local"
+	testLocalFile := testDirLocal + "/local1.txt"
+	testRemoteName := "local1r.txt"
+	// create local file
+	if err := os.MkdirAll(testDirLocal, 0777); err != nil {
+		t.Error("could not create local dir " + testDirLocal)
+	}
+	createRandomFile(t, testLocalFile)
+
+	var rf io.Reader
+	if rf, err = Open(testLocalFile); err != nil {
+		t.Errorf("err on open file %s, err: %v", testLocalFile, err)
+	}
+
+	// add user
+	tu := model.User{FirstName: "testFirst", LastName: "testLast", Email: "test@test", Password: "testPass", Role: "user"}
+	err := model.UserCreate(tu.FirstName, tu.LastName, tu.Email, tu.Password, tu.Role)
+	if err != nil {
+		t.Errorf("adding user %v, err: %v\n", tu, err)
+	}
+	u, err := model.UserByEmail(tu.Email)
+	if err != nil {
+		t.Errorf("retriving user %s, err: %v\n", tu.Email, err)
+	}
+
+	uid := u.ID
+	_, rcvName := filepath.Split(testLocalFile)
+	if err = SaveFile(uid, rcvName, rf); err != nil {
+		t.Errorf("saveFile %d, %s, err: %v", uid, rcvName, err)
+	}
+
+	// get saved file from DB
+
+	// check file exists
 
 	t.Logf("create/init vfiles")
 	InitConfiguration([]byte(config))
