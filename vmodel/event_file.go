@@ -10,11 +10,11 @@ import (
 // StoredFile
 // *****************************************************************************
 
-// StoredFile table contains the information for each stored file from table stored_file
-type UserFile struct {
+// EventFile table contains the information for each stored file from table stored_file
+type EventFile struct {
 	// ObjectID     bson.ObjectId `bson:"_id"`
 	ID           uint32    `db:"id" bson:"id,omitempty"` // Don't use ID, use StoredFileID() instead for consistency with MongoDB
-	UserID       uint32    `db:"user_id" bson:"user_id"`
+	EventID      uint32    `db:"event_id" bson:"event_id"`
 	Name         string    `db:"name" bson:"name"` // The name of the file, as user sees it
 	Size         int64     `db:"size" bson:"size"`
 	Md5          string    `db:"md5" bson:"md5"`
@@ -23,14 +23,14 @@ type UserFile struct {
 	UpdatedAt    time.Time `db:"updated_at" bson:"updated_at"`
 }
 
-func UserFileGetByUserIDName(userID uint32, name string) (UserFile, error) {
+func EventFileGetByEventIDName(eventID uint32, name string) (EventFile, error) {
 	var err error
 
-	result := UserFile{}
+	result := EventFile{}
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		err = database.SQL.Get(&result, "SELECT * FROM user_file WHERE user_id = ? and name = ? LIMIT 1", userID, name)
+		err = database.SQL.Get(&result, "SELECT * FROM event_file WHERE event_id = ? and name = ? LIMIT 1", eventID, name)
 	default:
 		err = ErrCode
 	}
@@ -38,13 +38,13 @@ func UserFileGetByUserIDName(userID uint32, name string) (UserFile, error) {
 	return result, standardizeError(err)
 }
 
-func UserFileCreate(userID uint32, name string, size int64, md5 string, storedFileID uint32) error {
+func EventFileCreate(eventID uint32, name string, size int64, md5 string, storedFileID uint32) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("INSERT INTO user_file (user_id, name, size, md5, stored_file_id) VALUES (?,?,?,?,?)",
-			userID, name, size, md5, storedFileID)
+		_, err = database.SQL.Exec("INSERT INTO event_file (event_id, name, size, md5, stored_file_id) VALUES (?,?,?,?,?)",
+			eventID, name, size, md5, storedFileID)
 	default:
 		err = ErrCode
 	}
@@ -52,13 +52,13 @@ func UserFileCreate(userID uint32, name string, size int64, md5 string, storedFi
 	return standardizeError(err)
 }
 
-func UserFileSetStoredFileID(userID uint32, name string, storedFileID uint32) error {
+func EventFileSetStoredFileID(eventID uint32, name string, storedFileID uint32) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("UPDATE user_file SET stored_file_id = ? WHERE user_id = ? and name = ?",
-			storedFileID, userID, name)
+		_, err = database.SQL.Exec("UPDATE event_file SET stored_file_id = ? WHERE event_id = ? and name = ?",
+			storedFileID, eventID, name)
 	default:
 		err = ErrCode
 	}
@@ -66,12 +66,12 @@ func UserFileSetStoredFileID(userID uint32, name string, storedFileID uint32) er
 	return standardizeError(err)
 }
 
-func UserFileDelete(userID uint32, name string) error {
+func EventFileDelete(eventID uint32, name string) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("DELETE FROM user_file WHERE user_id = ? and name = ? LIMIT 1", userID, name)
+		_, err = database.SQL.Exec("DELETE FROM event_file WHERE event_id = ? and name = ? LIMIT 1", eventID, name)
 	default:
 		err = ErrCode
 	}

@@ -15,14 +15,14 @@ type StoredFile struct {
 	// ObjectID  bson.ObjectId `bson:"_id"`
 	ID        uint32    `db:"id" bson:"id,omitempty"` // Don't use ID, use StoredFileID() instead for consistency with MongoDB
 	Name      string    `db:"name" bson:"name"`
-	Size      uint64    `db:"size" bson:"size"`
+	Size      int64     `db:"size" bson:"size"`
 	Md5       string    `db:"md5" bson:"md5"`
 	RefCount  uint32    `db:"ref_count" bson:"ref_count"`
 	CreatedAt time.Time `db:"created_at" bson:"created_at"`
 	UpdatedAt time.Time `db:"updated_at" bson:"updated_at"`
 }
 
-func GetStoredFileByID(ID uint32) (StoredFile, error) {
+func StoredFileGetByID(ID uint32) (StoredFile, error) {
 	var err error
 
 	result := StoredFile{}
@@ -37,7 +37,7 @@ func GetStoredFileByID(ID uint32) (StoredFile, error) {
 	return result, standardizeError(err)
 }
 
-func GetStoredFileByMd5(md5 string) (StoredFile, error) {
+func StoredFileGetByMd5(md5 string) (StoredFile, error) {
 	var err error
 
 	result := StoredFile{}
@@ -52,7 +52,7 @@ func GetStoredFileByMd5(md5 string) (StoredFile, error) {
 	return result, standardizeError(err)
 }
 
-func CreateStoredFile(name string, size uint64, md5 string) (StoredFile, error) {
+func StoredFileCreate(name string, size int64, md5 string) (StoredFile, error) {
 	var err error
 
 	switch database.ReadConfig().Type {
@@ -67,10 +67,10 @@ func CreateStoredFile(name string, size uint64, md5 string) (StoredFile, error) 
 	if err != nil {
 		return StoredFile{}, standardizeError(err)
 	}
-	return GetStoredFileByMd5(md5)
+	return StoredFileGetByMd5(md5)
 }
 
-func DeleteStoredFileByMd5(md5 string) error {
+func StoredFileDeleteByMd5(md5 string) error {
 	var err error
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
@@ -84,7 +84,7 @@ func DeleteStoredFileByMd5(md5 string) error {
 	return standardizeError(err)
 }
 
-func DeleteStoredFileByID(ID uint32) error {
+func StoredFileDeleteByID(ID uint32) error {
 	var err error
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:

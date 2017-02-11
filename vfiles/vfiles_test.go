@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/valeriugold/vket/shared/database"
 	"github.com/valeriugold/vket/vfiles/vlocal"
 	model "github.com/valeriugold/vket/vmodel"
 )
@@ -54,14 +55,12 @@ func createRandomFile(t *testing.T, testLocalFile string) {
 	}
 	// t.Log("write file now!!!!!!!")
 	if n, err := in.Write(RandBytes(1024)); err != nil {
-		t.Error("error writing to file %s: %v", testLocalFile, err)
+		t.Error("error writing to file", testLocalFile, ": ", err)
 	} else {
 		t.Logf("wrote %d fo file %s\n", n, testLocalFile)
 	}
 	in.Close()
 }
-
-const config = `{ "vfiles" : { "storageType" : "local", "params" : { "destDir" : "/tmp/vfiles_test_local" } } }`
 
 func TestVfiles(t *testing.T) {
 	c := Configuration{Type: "vlocal", VLocal: vlocal.Configuration{DestDir: "/tmp/vfiles_test_local"}}
@@ -69,66 +68,102 @@ func TestVfiles(t *testing.T) {
 
 }
 
+var configDb = database.Info{Type: database.TypeMySQL, MySQL: database.MySQLInfo{
+	Username:  "valeriug",
+	Password:  "tset",
+	Name:      "vket",
+	Hostname:  "127.0.0.1",
+	Port:      3306,
+	Parameter: "?parseTime=true"}}
+
 func TestLocal(t *testing.T) {
 	rand.Seed(time.Now().UTC().UnixNano())
 	testDirLocal := "/tmp/vfiles_test_local"
 	testLocalFile := testDirLocal + "/local1.txt"
-	testRemoteName := "local1r.txt"
+	testLocalLoadedFile := testDirLocal + "/loaded.txt"
 	// create local file
 	if err := os.MkdirAll(testDirLocal, 0777); err != nil {
 		t.Error("could not create local dir " + testDirLocal)
 	}
 	createRandomFile(t, testLocalFile)
 
-	var rf io.Reader
-	if rf, err = Open(testLocalFile); err != nil {
-		t.Errorf("err on open file %s, err: %v", testLocalFile, err)
-	}
-
 	// add user
-	tu := model.User{FirstName: "testFirst", LastName: "testLast", Email: "test@test", Password: "testPass", Role: "user"}
+	// Connect to database
+	database.Connect(configDb)
+	tu := model.User{FirstName: "testFirstVfiles", LastName: "testLastVfiles", Email: "Vfiles@test", Password: "testPass", Role: "user"}
 	err := model.UserCreate(tu.FirstName, tu.LastName, tu.Email, tu.Password, tu.Role)
 	if err != nil {
-		t.Errorf("adding user %v, err: %v\n", tu, err)
+		if !model.IsDuplicateEntry(err) {
+			t.Errorf("adding user %v, err: %v\n", tu, err)
+		}
 	}
+	defer model.UserDelete(tu.Email)
 	u, err := model.UserByEmail(tu.Email)
 	if err != nil {
 		t.Errorf("retriving user %s, err: %v\n", tu.Email, err)
 	}
 
-	uid := u.ID
-	_, rcvName := filepath.Split(testLocalFile)
-	if err = SaveFile(uid, rcvName, rf); err != nil {
-		t.Errorf("saveFile %d, %s, err: %v", uid, rcvName, err)
+	// add event
+	teName := "test name"
+	if err := model.EventCreate(u.ID, teName); err != nil {
+		t.Errorf("create event err: %v", err)
 	}
+	defer model.EventDelete(u.ID, teName)
+	// retrive event
+	x, err := model.EventByUserIDName(u.ID, teName)
+	if err != nil {
+		t.Errorf("retriving events %d, err: %v\n", u.ID, err)
+	}
+
+	rf, err := os.Open(testLocalFile)
+	if err != nil {
+		t.Errorf("err on open file %s, err: %v", testLocalFile, err)
+	}
+	eid := x.ID
+	rcvName := filepath.Base(testLocalFile)
+	if err = SaveData(eid, rcvName, rf); err != nil {
+		t.Errorf("saveFile %d, %s, err: %v", eid, rcvName, err)
+	}
+	rf.Close()
+	defer DeleteData(eid, rcvName)
 
 	// get saved file from DB
+	nf, err := os.Create(testLocalLoadedFile)
+	if err != nil {
+		t.Error("create file testLocalLoadedFile ", err)
+	}
+
+	if err = LoadData(eid, rcvName, nf); err != nil {
+		t.Error("LoadData ", err)
+	}
+	nf.Close()
 
 	// check file exists
+	// t.Logf("create/init vfiles")
+	// testConfig := Configuration{Type: "vlocal",
+	// 	VLocal: vlocal.Configuration{DestDir: "/tmp/vfiles_test_local"}}
+	// InitConfiguration(testConfig)
+	// t.Logf("save %s to %s", testLocalFile, testRemoteName)
+	// if err = SaveData(eid, rcvName, rf); err != nil {
+	// 	t.Error("FileSave(%s, %s) returned error %v", testLocalFile, testRemoteName, err)
+	// }
 
-	t.Logf("create/init vfiles")
-	InitConfiguration([]byte(config))
-	t.Logf("save %s to %s", testLocalFile, testRemoteName)
-	if err = FileSave(testLocalFile, testRemoteName); err != nil {
-		t.Error("FileSave(%s, %s) returned error %v", testLocalFile, testRemoteName, err)
-	}
-
-	// get the file
-	testLocalGetFile := testDirLocal + "/gotfile1.txt"
-	if err = FileGet(testLocalGetFile, testRemoteName); err != nil {
-		t.Error("could not get testRemoteName %s to %s, err=%v", testRemoteName, testLocalGetFile, err)
-	}
+	// // get the file
+	// testLocalGetFile := testDirLocal + "/gotfile1.txt"
+	// if err = FileGet(testLocalGetFile, testRemoteName); err != nil {
+	// 	t.Error("could not get testRemoteName %s to %s, err=%v", testRemoteName, testLocalGetFile, err)
+	// }
 
 	// [md5.Size]byte
 	md5f1, _ := getMd5FromFile(t, testLocalFile)
-	md5f2, _ := getMd5FromFile(t, testLocalGetFile)
+	md5f2, _ := getMd5FromFile(t, testLocalLoadedFile)
 	t.Logf("original %v ==? %v got from remote", md5f1, md5f2)
 	if md5f1 != md5f2 {
-		t.Error("original file " + testLocalFile + "is not equal to gotten file " + testLocalGetFile)
+		t.Error("original file " + testLocalFile + "is not equal to gotten file " + testLocalLoadedFile)
 	}
 
-	// delete remote
-	if err = FileRemove(testRemoteName); err != nil {
-		t.Error("could not remove testRemoteName %s, err=%v", testRemoteName, err)
-	}
+	// // delete remote
+	// if err = FileRemove(testRemoteName); err != nil {
+	// 	t.Error("could not remove testRemoteName %s, err=%v", testRemoteName, err)
+	// }
 }

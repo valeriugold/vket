@@ -2,6 +2,7 @@ package vlocal
 
 import (
 	"crypto/md5"
+	"encoding/hex"
 	"io"
 	"math/rand"
 	"os"
@@ -73,14 +74,20 @@ func TestLocal(t *testing.T) {
 	createRandomFile(t, testLocalFile)
 
 	t.Logf("save %s to %s, in dir %s", testLocalFile, testRemoteName, testDirRemote)
+	r, err := os.Open(testLocalFile)
+	if err != nil {
+		t.Error("open testLocalFile", testLocalFile, "err=", err)
+	}
 	x := VFilesLocal{testDirRemote}
-	if err = x.Save(testLocalFile, testRemoteName); err != nil {
+	storedId, size, md5Saved, err := x.Save(r, testRemoteName)
+	if err != nil {
 		t.Error("Save(%s, %s) returned error %v", testLocalFile, testRemoteName, err)
 	}
-	t.Logf("created x with %s", x.dir)
+	t.Logf("created x with %s / %s, size=%d, md5=%s", x.dir, storedId, size, md5Saved)
+	r.Close()
 
 	// check that remote file exists
-	testRemoteFile := testDirRemote + "/" + testRemoteName
+	testRemoteFile := testDirRemote + "/" + storedId
 	_, err = os.Stat(testRemoteFile)
 	if err != nil {
 		t.Error("there is no testRemoteFile %s, err=%v", testRemoteFile, err)
@@ -88,15 +95,21 @@ func TestLocal(t *testing.T) {
 
 	// get the file
 	testLocalGetFile := testDirLocal + "/gotfile1.txt"
-	if err = x.Load(testLocalGetFile, testRemoteName); err != nil {
+	w, err := os.Create(testLocalGetFile)
+	if err != nil {
+		t.Error(err)
+	}
+	if err = x.Load(w, storedId); err != nil {
 		t.Error("could not get testRemoteName %s to %s, err=%v", testRemoteName, testLocalGetFile, err)
 	}
 
-	// [md5.Size]byte
+	var md5fs [md5.Size]byte
 	md5f1, _ := getMd5FromFile(t, testLocalFile)
 	md5f2, _ := getMd5FromFile(t, testLocalGetFile)
-	t.Logf("original %v ==? %v got from remote", md5f1, md5f2)
-	if md5f1 != md5f2 {
+	tmp, _ := hex.DecodeString(md5Saved)
+	copy(md5fs[:], tmp)
+	t.Logf("original %v ==? %v got from remote, saved=%s, %v", md5f1, md5f2, md5Saved, md5fs)
+	if md5f1 != md5f2 || md5f1 != md5fs {
 		t.Error("original file " + testLocalFile + "is not equal to gotten file " + testLocalGetFile)
 	}
 

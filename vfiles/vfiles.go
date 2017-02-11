@@ -1,25 +1,20 @@
 package vfiles
 
 import (
-	"crypto/md5"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
-	"net/http"
-	"os"
 
-	"github.com/valeriugold/vket/vfiles"
 	"github.com/valeriugold/vket/vfiles/vlocal"
-	"github.com/valeriugold/vket/vlog"
 	model "github.com/valeriugold/vket/vmodel"
 )
 
 type SaveLoader interface {
-	Save(nameHere, nameThere string) error
-	Load(nameHere, nameThere string) error
-	Remove(nameThere string) error
-	DoesExist(nameThere string) bool
+	Save(r io.Reader, nameHint string) (fileId string, size int64, savedMd5 string, err error)
+	Load(w io.Writer, fileId string) error
+	Remove(fileId string) error
+	DoesExist(fileId string) bool
 }
 
 // vsl is the object that will perform the actual save and load operation on files
@@ -46,7 +41,7 @@ func InitConfiguration(c Configuration) {
 
 // SaveMultipart handles a multipart files upload, by storing the actual files and
 // filling all necessary DB information
-func SaveMultipart(userID uint32, mr multipart.Reader) error {
+func SaveMultipart(eventID uint32, mr multipart.Reader) error {
 	//copy each part to destination.
 	for {
 		part, err := mr.NextPart()
@@ -59,124 +54,153 @@ func SaveMultipart(userID uint32, mr multipart.Reader) error {
 			continue
 		}
 
-		if err = SaveFile(userID, part.FileName(), part); err != nil {
+		if err = SaveData(eventID, part.FileName(), part); err != nil {
 			return err
 		}
 
 	}
 }
 
-func getTmpName(name string) string {
-	return "/tmp/" + name, nil
-}
-
-func SaveFile(userID uint32, receivedName string, r io.Reader) error {
-	vlog.Trace.Printf("multipart file: %s\n", receivedName)
-
-	// prepare hash
-	hash := md5.New()
-	f := io.TeeReader(r, hash)
-
-	// get temp name
-	tmpName, _ := vfiles.getTmpName(receivedName)
-	dst, err = os.Create(tmpName)
+func LoadData(eventID uint32, name string, w io.Writer) error {
+	uf, err := model.EventFileGetByEventIDName(eventID, name)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	size, err := io.Copy(dst, f)
-	dst.Close()
-	if err != nil {
-		os.Remove(tmpName)
-		// http.Error(w, err.Error(), http.StatusInternalServerError)
 		return err
 	}
-
-	calculatedMd5 := fmt.Sprintf("%x", hash.Sum(nil))
-	// add to user_file (if possible)
-	if err = model.CreateUserFile(userID, receivedName, size, calculatedMd5, 1); err != nil {
-		os.Remove(tmpName)
-		if model.IsDuplicateEntry(err) {
-			// file already exists
-			vlog.Trace("file %s for user %s already exists", receivedName, userID)
-			return nil
-		}
-		return err
-	}
-
-	// transcode file or whatever...
-	tmpName, size, calculatedMd5, err = TransformFile(tmp)
+	sf, err := model.StoredFileGetByID(uf.StoredFileID)
 	if err != nil {
-		os.Remove(tmpName)
 		return err
 	}
-
-	// defer deleting the file from temp storage
-	defer os.Remove(tmpName)
-
-	sf, err := model.CreateStoredFile(tmpName, size, calculatedMd5)
-	if err != nil {
-		// delete from DB
-		model.DeleteUserFileByUserIDName(userID, receivedName)
-		return err
-	}
-	// the file already exists if DB name is different than tmpName;
-	// otherwise the file needs to be stored permanently
-	if sf.Name == tmpName {
-		if err = storeActualFile(tmpName, calculatedMd5); err != nil {
-			// delete from DB
-			model.DeleteUserFileByUserIDName(userID, receivedName)
-			model.DeleteStoredFileByID(sf.ID)
-			return err
-		}
-	}
-	if err = SetStoredFileID(userID, receivedName, sf.ID); err != nil {
-		// delete from DB
-		model.DeleteUserFileByUserIDName(userID, receivedName)
-		model.DeleteStoredFileByID(sf.ID)
+	if err = vsl.Load(w, sf.Name); err != nil {
 		return err
 	}
 	return nil
 }
 
-func storeActualFile(crtName, md5 string) (string, error) {
-	nameMd5 := crtName + "-" + calculatedMd5
-	if err := vsl.Save(crtName, nameMd5); err != nil {
+func DeleteData(eventID uint32, name string) error {
+	uf, err := model.EventFileGetByEventIDName(eventID, name)
+	if err != nil {
+		return err
+	}
+	sf, err := model.StoredFileGetByID(uf.StoredFileID)
+	if err != nil {
+		return err
+	}
+	if err = vsl.Remove(sf.Name); err != nil {
+		return err
+	}
+	if err = model.EventFileDelete(eventID, name); err != nil {
+		return err
+	}
+	if err = model.StoredFileDeleteByID(uf.StoredFileID); err != nil {
 		return err
 	}
 	return nil
-	// only copy the file if the remote file is not there already,
-	// if Stat returns with not error, the file already exists
-	if sn, err := os.Stat(name); err != nil {
-		if os.IsNotExist(err) {
-			err = os.Rename(crtName, name)
-		}
+}
+
+// try limit size with io.LimitReader
+func SaveData(eventID uint32, receivedName string, r io.Reader) error {
+	// vlog.Trace.Printf("multipart file: %s\n", receivedName)
+	log.Printf("multipart file: %s\n", receivedName)
+
+	fileId, size, calculatedMd5, err := vsl.Save(r, fmt.Sprintf("%d-%s", eventID, receivedName))
+	if err != nil {
+		return err
 	}
-	return err
+
+	sf, err := model.StoredFileCreate(fileId, size, calculatedMd5)
+	if err != nil {
+		vsl.Remove(fileId)
+		return err
+	}
+
+	// add to event_file
+	if err = model.EventFileCreate(eventID, receivedName, size, calculatedMd5, sf.ID); err != nil {
+		model.StoredFileDeleteByID(sf.ID)
+		vsl.Remove(fileId)
+		return err
+	}
+
+	return nil
+	// // get temp name
+	// tmpName, _ := vfiles.getTmpName(receivedName)
+	// dst, err = os.Create(tmpName)
+	// if err != nil {
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	// size, err := io.Copy(dst, f)
+	// dst.Close()
+	// if err != nil {
+	// 	os.Remove(tmpName)
+	// 	// http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return err
+	// }
+
+	// calculatedMd5 := fmt.Sprintf("%x", hash.Sum(nil))
+	// // add to event_file (if possible)
+	// if err = model.EventFileCreate(eventID, receivedName, size, calculatedMd5, 1); err != nil {
+	// 	os.Remove(tmpName)
+	// 	if model.IsDuplicateEntry(err) {
+	// 		// file already exists
+	// 		vlog.Trace("file %s for event %s already exists", receivedName, eventID)
+	// 		return nil
+	// 	}
+	// 	return err
+	// }
+
+	// // transcode file or whatever...
+	// tmpName, size, calculatedMd5, err = TransformFile(tmp)
+	// if err != nil {
+	// 	os.Remove(tmpName)
+	// 	return err
+	// }
+
+	// // defer deleting the file from temp storage
+	// defer os.Remove(tmpName)
+
+	// sf, err := model.StoredFileCreate(tmpName, size, calculatedMd5)
+	// if err != nil {
+	// 	// delete from DB
+	// 	model.EventFileDeleteByEventIDName(eventID, receivedName)
+	// 	return err
+	// }
+	// // the file already exists if DB name is different than tmpName;
+	// // otherwise the file needs to be stored permanently
+	// if sf.Name == tmpName {
+	// 	if err = storeActualFile(tmpName, calculatedMd5); err != nil {
+	// 		// delete from DB
+	// 		model.EventFileDeleteByEventIDName(eventID, receivedName)
+	// 		model.StoredFileDeleteByID(sf.ID)
+	// 		return err
+	// 	}
+	// }
+	// if err = EventFileSetStoredFileID(eventID, receivedName, sf.ID); err != nil {
+	// 	// delete from DB
+	// 	model.EventFileDeleteByEventIDName(eventID, receivedName)
+	// 	model.StoredFileDeleteByID(sf.ID)
+	// 	return err
+	// }
+	// return nil
 }
 
-func retrieveActualFile(w io.Writer, name string, md5 string) {
-	nameMd5 := name + "-" + calculatedMd5
-
-}
+// func storeActualFile(crtName, md5 string) (string, error) {
+// 	nameMd5 := crtName + "-" + calculatedMd5
+// 	if err := vsl.Save(crtName, nameMd5); err != nil {
+// 		return err
+// 	}
+// 	return nil
+// 	// only copy the file if the remote file is not there already,
+// 	// if Stat returns with not error, the file already exists
+// 	if sn, err := os.Stat(name); err != nil {
+// 		if os.IsNotExist(err) {
+// 			err = os.Rename(crtName, name)
+// 		}
+// 	}
+// 	return err
+// }
 
 // TransformFile applies transformation on original file, for example transcoding
 // it doesn't do anything right now, maybe later
 func TransformFile(tmpName string, size uint64, calculatedMd5 string) (string, uint64, string, error) {
 	return tmpName, size, calculatedMd5, nil
-}
-
-func LoadFile(userID uint32, receivedName string, w io.Writer) error {
-	// get file data from DB
-	// user_file
-	uf, err := GetUserFileByUserIDName(userID, receivedName)
-	if err != nil {
-		return err
-	}
-	// stored_file
-	sf, err := GetStoredFileByID(uf.StoredFileID)
-	if err != nil {
-		return err
-	}
-
 }
