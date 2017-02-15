@@ -33,13 +33,15 @@ var dir = "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/vviews/vtempla
 
 // Init should be called automatically when this package is used
 func Init() {
-	names := []string{"about", "error", "hello", "vuploadmovie", "login", "register"}
-	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register"}
+	names := []string{"about", "error", "hello", "vuploadmovie", "login", "register", "newevent", "eventsshow"}
+	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register", "newevent", "eventsshow"}
 	navItems := []navItem{{"about", "About"},
 		{"login", "Login"},
 		{"register", "Register"},
 		{"hello", "Hello"},
 		{"uploadmovies", "UploadMovies"},
+		{"newevent", "NewEvent"},
+		{"events", "Events"},
 		{"logout", "Logout"},
 		{"exitNow", "Exit"}}
 	for i, n := range names {
@@ -122,8 +124,8 @@ func Hello(w http.ResponseWriter, fields ...string) {
 	UseTemplate(w, "hello", fields)
 }
 
-func UploadMovies(w http.ResponseWriter) {
-	UseTemplate(w, "vuploadmovie", nil)
+func UploadMovies(w http.ResponseWriter, eventID string) {
+	UseTemplate(w, "vuploadmovie", eventID)
 }
 func Login(w http.ResponseWriter, fields ...string) {
 	UseTemplate(w, "login", fields)
@@ -135,4 +137,12 @@ func Error(w http.ResponseWriter, fields ...string) {
 
 func Register(w http.ResponseWriter, fields ...string) {
 	UseTemplate(w, "register", fields)
+}
+
+func NewEvent(w http.ResponseWriter, fields ...string) {
+	UseTemplate(w, "newevent", fields)
+}
+
+func EventsShow(w http.ResponseWriter, events interface{}) {
+	UseTemplate(w, "eventsshow", events)
 }

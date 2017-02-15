@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -97,6 +98,8 @@ func main() {
 	InitConfiguration(config.Server)
 	// Connect to database
 	database.Connect(config.Database)
+	// init vfiles
+	vfiles.InitConfiguration(config.VFiles)
 
 	vviews.Init()
 	stdChain := alice.New(loggingSetter(os.Stdout))
@@ -107,8 +110,12 @@ func main() {
 	http.Handle("/login", stdChain.ThenFunc(LoginALL))
 	http.Handle("/register", stdChain.ThenFunc(RegisterALL))
 	http.Handle("/about", stdChain.ThenFunc(AboutGET))
+	http.Handle("/events", stdChain.ThenFunc(EventsGET))
+	http.Handle("/newevent", stdChain.ThenFunc(NewEventALL))
 	http.Handle("/hello", stdChain.ThenFunc(HelloGET))
-	http.Handle("/uploadmovies", stdChain.ThenFunc(UploadMoviesALL))
+	// http.Handle("/uploadmovies", stdChain.ThenFunc(UploadMoviesALL))
+	http.Handle("/uploadforevent", stdChain.ThenFunc(UploadForEventALL))
+
 	http.Handle("/logout", stdChain.ThenFunc(LogoutGET))
 	http.Handle("/exitNow", stdChain.ThenFunc(ExitNowGET))
 
@@ -153,10 +160,14 @@ func HelloGET(w http.ResponseWriter, r *http.Request) {
 	} else {
 		vlog.Trace.Printf("user email %s = %v", email, user)
 	}
-	vviews.Hello(w, strconv.Itoa(s.Values["email"].(uint32)), s.Values["email"].(string), user.Email, s.Values["role"].(string), user.Role, user.FirstName, user.LastName, user.Password, user.ID)
+	//FormatUint(, base int) string
+	vviews.Hello(w, fmt.Sprintf("%d", s.Values["ID"].(uint32)),
+		s.Values["email"].(string), user.Email, s.Values["role"].(string),
+		user.Role, user.FirstName, user.LastName, user.Password,
+		fmt.Sprintf("%d", user.ID))
 }
 
-func UploadMoviesALL(w http.ResponseWriter, r *http.Request) {
+func UploadForEventALL(w http.ResponseWriter, r *http.Request) {
 	s, err := getAuthenticatedSession(w, r)
 	if err != nil {
 		return
@@ -165,36 +176,51 @@ func UploadMoviesALL(w http.ResponseWriter, r *http.Request) {
 	vlog.Trace.Printf("r.Method: %s\n", r.Method)
 
 	if r.Method == "POST" {
-		UploadMoviesPOST(w, r)
+		UploadForEventPOST(w, r)
 	} else {
-		UploadMoviesGET(w, r)
+		UploadForEventGET(w, r)
 	}
 }
 
-func UploadMoviesGET(w http.ResponseWriter, r *http.Request) {
+func UploadForEventGET(w http.ResponseWriter, r *http.Request) {
 	s, err := getAuthenticatedSession(w, r)
 	if err != nil {
 		return
 	}
 	s.Save(r, w)
-	vviews.UploadMovies(w)
+	eventID := r.FormValue("eventID")
+
+	vviews.UploadMovies(w, eventID)
 }
 
-func UploadMoviesPOST(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+func UploadForEventPOST(w http.ResponseWriter, r *http.Request) {
+	_, err := getAuthenticatedSession(w, r)
 	if err != nil {
 		return
 	}
-	ID := s.Values["ID"].(uint32)
+	// ID := s.Values["ID"].(uint32)
 
+	vlog.Trace.Printf("Upload ...")
 	//get the multipart reader for the request.
 	reader, err := r.MultipartReader()
 	if err != nil {
+		vlog.Warning.Printf("MultpartReader, err=%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	if err = vfiles.SaveMultipart(ID, reader); err != nil {
+	// eventID := r.FormValue("eventID")
+	// vlog.Trace.Printf("converting ev=%v", eventID)
+	// eid, err := strconv.ParseUint(eventID, 10, 32)
+	// if err != nil {
+	// 	vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	eid := 0
+	vlog.Trace.Printf("calling SaveMultipart")
+	if err = vfiles.SaveMultipart(uint32(eid), reader); err != nil {
+		vlog.Warning.Printf("err on SaveMultipart, err:%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -203,6 +229,48 @@ func UploadMoviesPOST(w http.ResponseWriter, r *http.Request) {
 	//display success message.
 	vviews.Hello(w, "upload", "successful")
 }
+
+// func UploadMoviesALL(w http.ResponseWriter, r *http.Request) {
+// 	s, err := getAuthenticatedSession(w, r)
+// 	if err != nil {
+// 		return
+// 	}
+// 	s.Save(r, w)
+// 	vlog.Trace.Printf("r.Method: %s\n", r.Method)
+// 	if r.Method == "POST" {
+// 		UploadMoviesPOST(w, r)
+// 	} else {
+// 		UploadMoviesGET(w, r)
+// 	}
+// }
+// func UploadMoviesGET(w http.ResponseWriter, r *http.Request) {
+// 	s, err := getAuthenticatedSession(w, r)
+// 	if err != nil {
+// 		return
+// 	}
+// 	s.Save(r, w)
+// 	vviews.UploadMovies(w)
+// }
+// func UploadMoviesPOST(w http.ResponseWriter, r *http.Request) {
+// 	s, err := getAuthenticatedSession(w, r)
+// 	if err != nil {
+// 		return
+// 	}
+// 	ID := s.Values["ID"].(uint32)
+// 	//get the multipart reader for the request.
+// 	reader, err := r.MultipartReader()
+// 	if err != nil {
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
+// 	if err = vfiles.SaveMultipart(ID, reader); err != nil {
+// 		http.Error(w, err.Error(), http.StatusInternalServerError)
+// 		return
+// 	}
+// 	vlog.Trace.Printf("success!\n")
+// 	//display success message.
+// 	vviews.Hello(w, "upload", "successful")
+// }
 
 func ExitNowGET(w http.ResponseWriter, r *http.Request) {
 	os.Exit(0)
@@ -287,6 +355,51 @@ func RegisterPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/login", http.StatusFound)
+}
+
+func EventsGET(w http.ResponseWriter, r *http.Request) {
+	s, err := getAuthenticatedSession(w, r)
+	if err != nil {
+		return
+	}
+	s.Save(r, w)
+	// get all events for this user
+	userID := s.Values["ID"].(uint32)
+	evs, err := model.EventGetAllForUserID(userID)
+	if err != nil {
+		vlog.Warning.Printf("Could not get events for user id %d, err:%v", userID, err)
+		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", userID)+" error="+err.Error())
+		return
+	}
+	vviews.EventsShow(w, evs)
+}
+func NewEventALL(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		NewEventPOST(w, r)
+	} else {
+		NewEventGET(w, r)
+	}
+}
+func NewEventGET(w http.ResponseWriter, r *http.Request) {
+	vviews.NewEvent(w, "eventName")
+}
+func NewEventPOST(w http.ResponseWriter, r *http.Request) {
+	s, err := getAuthenticatedSession(w, r)
+	if err != nil {
+		return
+	}
+	s.Save(r, w)
+
+	evName := r.FormValue("eventName")
+	userID := s.Values["ID"].(uint32)
+	err = model.EventCreate(userID, evName)
+	if err != nil {
+		vlog.Warning.Printf("Create event for user id %d returned err=%s", userID, err.Error())
+		// VG: show error page
+		vviews.Error(w, "Create event for user id "+fmt.Sprintf("%d", userID)+" error="+err.Error())
+		return
+	}
+	http.Redirect(w, r, "/events", http.StatusFound)
 }
 
 // func (w http.ResponseWriter, r *http.Request) {

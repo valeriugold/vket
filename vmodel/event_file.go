@@ -38,6 +38,24 @@ func EventFileGetByEventIDName(eventID uint32, name string) (EventFile, error) {
 	return result, standardizeError(err)
 }
 
+// EventFileGetAllForEventID gets all files for an event_id
+func EventFileGetAllForEventID(eventID uint32) ([]EventFile, error) {
+	var err error
+
+	var result []EventFile
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		err = database.SQL.Select(&result,
+			"SELECT id,event_id, name, size, md5, stored_file_id, created_at, updated_at FROM event_dile "+
+				"WHERE event_id = ?", eventID)
+	default:
+		err = ErrCode
+	}
+
+	return result, standardizeError(err)
+}
+
 func EventFileCreate(eventID uint32, name string, size int64, md5 string, storedFileID uint32) error {
 	var err error
 

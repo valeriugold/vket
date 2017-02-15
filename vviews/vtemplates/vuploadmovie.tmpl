@@ -2,10 +2,11 @@
 {{define "head"}}{{end}}
 {{define "content"}}
 <h1>Upload Movies</h1>
-<form action="uploadmovies" method="POST" enctype="multipart/form-data">
+<form action="uploadforevent" method="POST" enctype="multipart/form-data">
     <div class="form-group">
-        <label for="uploadmovies">Upload Movies</label>
-        <input type="file" name="uploadmovies" id="uploadmovies" multiple="multiple"/>
+        <input type="hidden" name="eventID" value="{{.}}"/>
+        <label for="uploadforevent">Upload Movies</label>
+        <input type="file" name="uploadforevent" id="uploadforevent" multiple="multiple"/>
         <!-- <input type="submit" name="submit" value="upload" /> -->
         <p class="help-block">Example block-level help text here.</p>
     </div>

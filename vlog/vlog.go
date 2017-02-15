@@ -31,10 +31,10 @@ func InitConfiguration(c Configuration) {
 
 var (
 	config  Configuration
-	Trace   *log.Logger
-	Info    *log.Logger
-	Warning *log.Logger
-	Error   *log.Logger
+	Trace   *log.Logger = log.New(os.Stdout, "TRACE-: ", log.Ldate|log.Ltime|log.Lshortfile)
+	Info    *log.Logger = log.New(os.Stdout, "INFO-: ", log.Ldate|log.Ltime|log.Lshortfile)
+	Warning *log.Logger = log.New(os.Stderr, "WARN-: ", log.Ldate|log.Ltime|log.Lshortfile)
+	Error   *log.Logger = log.New(os.Stderr, "ERR-: ", log.Ldate|log.Ltime|log.Lshortfile)
 )
 
 func Init(traceHandle io.Writer,

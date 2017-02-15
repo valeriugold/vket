@@ -16,7 +16,7 @@ type VFilesLocal struct {
 var config Configuration
 
 type Configuration struct {
-	DestDir string `json:"destDir"`
+	DestDir string `json:"DestDir"`
 }
 
 func InitConfiguration(c Configuration) *VFilesLocal {

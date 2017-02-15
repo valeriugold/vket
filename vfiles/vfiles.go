@@ -1,12 +1,15 @@
 package vfiles
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
+	"strconv"
 
 	"github.com/valeriugold/vket/vfiles/vlocal"
+	"github.com/valeriugold/vket/vlog"
 	model "github.com/valeriugold/vket/vmodel"
 )
 
@@ -32,6 +35,7 @@ type Configuration struct {
 func InitConfiguration(c Configuration) {
 	config = c
 	if c.Type == "vlocal" {
+		vlog.Trace.Printf("init vsl from vlocal")
 		vsl = vlocal.InitConfiguration(config.VLocal)
 	} else {
 		log.Fatalf("wrong type for file store (%s), only vlocal is allowed for now", c.Type)
@@ -41,19 +45,35 @@ func InitConfiguration(c Configuration) {
 
 // SaveMultipart handles a multipart files upload, by storing the actual files and
 // filling all necessary DB information
-func SaveMultipart(eventID uint32, mr multipart.Reader) error {
+func SaveMultipart(eventID uint32, mr *multipart.Reader) error {
 	//copy each part to destination.
+	vlog.Trace.Printf("SaveMultipart")
 	for {
 		part, err := mr.NextPart()
 		if err == io.EOF {
 			return nil
 		}
 
+		formName := part.FormName()
+		vlog.Trace.Printf("formName=%v", formName)
 		//if part.FileName() is empty, skip this iteration.
 		if part.FileName() == "" {
+			if formName == "eventID" {
+				buf := new(bytes.Buffer)
+				buf.ReadFrom(part)
+				vlog.Trace.Println("eventID is: ", buf.String())
+				if eid, err := strconv.ParseUint(buf.String(), 10, 32); err == nil {
+					eventID = uint32(eid)
+				} else {
+					log.Fatalf("coudl not parseuint %s, err: %v", buf.String(), err)
+				}
+			}
 			continue
 		}
 
+		if eventID == 0 {
+			log.Fatalf("eventID=%d, it was not read from form", eventID)
+		}
 		if err = SaveData(eventID, part.FileName(), part); err != nil {
 			return err
 		}
@@ -99,9 +119,8 @@ func DeleteData(eventID uint32, name string) error {
 
 // try limit size with io.LimitReader
 func SaveData(eventID uint32, receivedName string, r io.Reader) error {
-	// vlog.Trace.Printf("multipart file: %s\n", receivedName)
-	log.Printf("multipart file: %s\n", receivedName)
-
+	vlog.Trace.Printf("multipart file: %s\n", receivedName)
+	vlog.Trace.Printf("SaveData eventID=%d, rcvName=%s", eventID, receivedName)
 	fileId, size, calculatedMd5, err := vsl.Save(r, fmt.Sprintf("%d-%s", eventID, receivedName))
 	if err != nil {
 		return err

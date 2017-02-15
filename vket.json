@@ -7,6 +7,12 @@
         // dest is std for stout and stderr, or a specific file
         "destination" : "std"
     },
+    "VFiles" : {
+        "Type" : "vlocal",
+        "VLocal" : {
+            "DestDir" : "/tmp/vlocal"
+        }
+    },
     // server configuration data
     "Server" : {
         "port" : 9090,

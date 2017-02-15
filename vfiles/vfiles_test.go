@@ -120,6 +120,7 @@ func TestLocal(t *testing.T) {
 		t.Errorf("err on open file %s, err: %v", testLocalFile, err)
 	}
 	eid := x.ID
+	t.Logf("eeeeeeeeeeeeid=%d", eid)
 	rcvName := filepath.Base(testLocalFile)
 	if err = SaveData(eid, rcvName, rf); err != nil {
 		t.Errorf("saveFile %d, %s, err: %v", eid, rcvName, err)

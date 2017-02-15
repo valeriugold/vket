@@ -38,6 +38,24 @@ func EventByUserIDName(userID uint32, name string) (Event, error) {
 	return result, standardizeError(err)
 }
 
+// EventGetAllForUserID gets all events for a user_id
+func EventGetAllForUserID(userID uint32) ([]Event, error) {
+	var err error
+
+	var result []Event
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		err = database.SQL.Select(&result,
+			"SELECT id, name, user_id, status, created_at, updated_at FROM event "+
+				"WHERE user_id = ?", userID)
+	default:
+		err = ErrCode
+	}
+
+	return result, standardizeError(err)
+}
+
 // EventCreate creates event
 func EventCreate(userID uint32, name string) error {
 	var err error
