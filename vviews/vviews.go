@@ -33,8 +33,10 @@ var dir = "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/vviews/vtempla
 
 // Init should be called automatically when this package is used
 func Init() {
-	names := []string{"about", "error", "hello", "vuploadmovie", "login", "register", "newevent", "eventsshow"}
-	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register", "newevent", "eventsshow"}
+	names := []string{"about", "error", "hello", "vuploadmovie",
+		"login", "register", "newevent", "eventsshow", "filesshow", "fineuploader-s3-ui"}
+	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register",
+		"newevent", "eventsshow", "filesshow", "fineuploader-s3-ui"}
 	navItems := []navItem{{"about", "About"},
 		{"login", "Login"},
 		{"register", "Register"},
@@ -43,6 +45,7 @@ func Init() {
 		{"newevent", "NewEvent"},
 		{"events", "Events"},
 		{"logout", "Logout"},
+		{"fineuploader-s3-ui", "FineUploader"},
 		{"exitNow", "Exit"}}
 	for i, n := range names {
 		views[n] = CreateView(n, nameOfBaseTmpl, []string{n}, navActives[i], navItems)
@@ -124,8 +127,8 @@ func Hello(w http.ResponseWriter, fields ...string) {
 	UseTemplate(w, "hello", fields)
 }
 
-func UploadMovies(w http.ResponseWriter, eventID string) {
-	UseTemplate(w, "vuploadmovie", eventID)
+func UploadMovies(w http.ResponseWriter, event interface{}) {
+	UseTemplate(w, "vuploadmovie", event)
 }
 func Login(w http.ResponseWriter, fields ...string) {
 	UseTemplate(w, "login", fields)
@@ -145,4 +148,14 @@ func NewEvent(w http.ResponseWriter, fields ...string) {
 
 func EventsShow(w http.ResponseWriter, events interface{}) {
 	UseTemplate(w, "eventsshow", events)
+}
+func FielesShow(w http.ResponseWriter, event interface{}, files interface{}) {
+	UseTemplate(w, "filesshow", struct {
+		Event interface{}
+		Files interface{}
+	}{Event: event, Files: files})
+}
+func FineUploadMovies(w http.ResponseWriter, event interface{}) {
+	vlog.Trace.Printf("show fineuploader-s3-ui, event=%v", event)
+	UseTemplate(w, "fineuploader-s3-ui", event)
 }

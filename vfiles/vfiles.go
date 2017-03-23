@@ -1,12 +1,10 @@
 package vfiles
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
 	"mime/multipart"
-	"strconv"
 
 	"github.com/valeriugold/vket/vfiles/vlocal"
 	"github.com/valeriugold/vket/vlog"
@@ -54,26 +52,26 @@ func SaveMultipart(eventID uint32, mr *multipart.Reader) error {
 			return nil
 		}
 
-		formName := part.FormName()
-		vlog.Trace.Printf("formName=%v", formName)
+		// formName := part.FormName()
+		// vlog.Trace.Printf("formName=%v", formName)
 		//if part.FileName() is empty, skip this iteration.
 		if part.FileName() == "" {
-			if formName == "eventID" {
-				buf := new(bytes.Buffer)
-				buf.ReadFrom(part)
-				vlog.Trace.Println("eventID is: ", buf.String())
-				if eid, err := strconv.ParseUint(buf.String(), 10, 32); err == nil {
-					eventID = uint32(eid)
-				} else {
-					log.Fatalf("coudl not parseuint %s, err: %v", buf.String(), err)
-				}
-			}
+			// if formName == "eventID" {
+			// 	buf := new(bytes.Buffer)
+			// 	buf.ReadFrom(part)
+			// 	vlog.Trace.Println("eventID is: ", buf.String())
+			// 	if eid, err := strconv.ParseUint(buf.String(), 10, 32); err == nil {
+			// 		eventID = uint32(eid)
+			// 	} else {
+			// 		log.Fatalf("coudl not parseuint %s, err: %v", buf.String(), err)
+			// 	}
+			// }
 			continue
 		}
 
-		if eventID == 0 {
-			log.Fatalf("eventID=%d, it was not read from form", eventID)
-		}
+		// if eventID == 0 {
+		// 	log.Fatalf("eventID=%d, it was not read from form", eventID)
+		// }
 		if err = SaveData(eventID, part.FileName(), part); err != nil {
 			return err
 		}
@@ -96,24 +94,39 @@ func LoadData(eventID uint32, name string, w io.Writer) error {
 	return nil
 }
 
-func DeleteData(eventID uint32, name string) error {
-	uf, err := model.EventFileGetByEventIDName(eventID, name)
+func DeleteDataByEventIDName(eventID uint32, name string) error {
+	ef, err := model.EventFileGetByEventIDName(eventID, name)
 	if err != nil {
 		return err
 	}
-	sf, err := model.StoredFileGetByID(uf.StoredFileID)
+	return DeleteDataByEventFile(ef)
+}
+func DeleteDataByEventFileID(eventFileID uint32) error {
+	vlog.Trace.Printf("deleting file eventFileId=%d", eventFileID)
+	ef, err := model.EventFileGetByEventFileID(eventFileID)
 	if err != nil {
 		return err
 	}
-	if err = vsl.Remove(sf.Name); err != nil {
+	return DeleteDataByEventFile(ef)
+}
+func DeleteDataByEventFile(ef model.EventFile) error {
+	sf, err := model.StoredFileGetByID(ef.StoredFileID)
+	if err != nil {
 		return err
 	}
-	if err = model.EventFileDelete(eventID, name); err != nil {
+	if err = model.EventFileDeleteByID(ef.ID); err != nil {
 		return err
 	}
-	if err = model.StoredFileDeleteByID(uf.StoredFileID); err != nil {
+	if err = model.StoredFileDeleteByID(ef.StoredFileID); err != nil {
 		return err
 	}
+	if sf.RefCount <= 1 {
+		// nobody else has a reference to this file
+		if err = vsl.Remove(sf.Name); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -130,6 +143,10 @@ func SaveData(eventID uint32, receivedName string, r io.Reader) error {
 	if err != nil {
 		vsl.Remove(fileId)
 		return err
+	}
+	if sf.Name != fileId {
+		// the file already existed, its ref_counter was increased, but there is no need to store it again
+		vsl.Remove(fileId)
 	}
 
 	// add to event_file

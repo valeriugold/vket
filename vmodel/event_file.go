@@ -23,6 +23,21 @@ type EventFile struct {
 	UpdatedAt    time.Time `db:"updated_at" bson:"updated_at"`
 }
 
+func EventFileGetByEventFileID(ID uint32) (EventFile, error) {
+	var err error
+
+	result := EventFile{}
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		err = database.SQL.Get(&result, "SELECT * FROM event_file WHERE ID = ? LIMIT 1", ID)
+	default:
+		err = ErrCode
+	}
+
+	return result, standardizeError(err)
+}
+
 func EventFileGetByEventIDName(eventID uint32, name string) (EventFile, error) {
 	var err error
 
@@ -47,7 +62,7 @@ func EventFileGetAllForEventID(eventID uint32) ([]EventFile, error) {
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
 		err = database.SQL.Select(&result,
-			"SELECT id,event_id, name, size, md5, stored_file_id, created_at, updated_at FROM event_dile "+
+			"SELECT id,event_id, name, size, md5, stored_file_id, created_at, updated_at FROM event_file "+
 				"WHERE event_id = ?", eventID)
 	default:
 		err = ErrCode
@@ -90,6 +105,19 @@ func EventFileDelete(eventID uint32, name string) error {
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
 		_, err = database.SQL.Exec("DELETE FROM event_file WHERE event_id = ? and name = ? LIMIT 1", eventID, name)
+	default:
+		err = ErrCode
+	}
+
+	return standardizeError(err)
+}
+
+func EventFileDeleteByID(ID uint32) error {
+	var err error
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		_, err = database.SQL.Exec("DELETE FROM event_file WHERE ID = ? LIMIT 1", ID)
 	default:
 		err = ErrCode
 	}

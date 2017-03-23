@@ -7,4 +7,5 @@ template/
 vfiles/tmp/
 #vmodel/
 vusers/
+s3_secret.go
 *compilation*

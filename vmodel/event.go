@@ -21,7 +21,7 @@ type Event struct {
 	UpdatedAt time.Time `db:"updated_at" bson:"updated_at"`
 }
 
-// EventByName gets user information from name
+// EventByName gets event information by UserID and Name
 func EventByUserIDName(userID uint32, name string) (Event, error) {
 	var err error
 
@@ -31,6 +31,22 @@ func EventByUserIDName(userID uint32, name string) (Event, error) {
 	case database.TypeMySQL:
 		err = database.SQL.Get(&result, "SELECT * FROM event WHERE user_id = ? AND name = ? LIMIT 1",
 			userID, name)
+	default:
+		err = ErrCode
+	}
+
+	return result, standardizeError(err)
+}
+
+// EventByEventID gets event information by EventID
+func EventByEventID(eventID uint32) (Event, error) {
+	var err error
+
+	result := Event{}
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		err = database.SQL.Get(&result, "SELECT * FROM event WHERE id = ? LIMIT 1", eventID)
 	default:
 		err = ErrCode
 	}

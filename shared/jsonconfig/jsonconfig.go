@@ -37,6 +37,6 @@ func Load(configFile string, p Parser) {
 
 	// Parse the config
 	if err := p.ParseJSON(b); err != nil {
-		log.Fatalln("Could not parse %q: %v", configFile, err)
+		log.Fatalf("Could not parse %q: %v", configFile, err)
 	}
 }

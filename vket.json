@@ -15,9 +15,10 @@
     },
     // server configuration data
     "Server" : {
-        "port" : 9090,
+        "Port" : 9090,
         // location of static files, for now only for bootstrap
-        "static" : "bootstrap-3.3.7-dist"
+        "Static" : "bootstrap-3.3.7-dist",
+        "FineUploader" : "fineuploader/s3.fine-uploader"
     },
     "Database": {
 	"Type": "MySQL",

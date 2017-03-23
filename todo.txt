@@ -55,3 +55,10 @@ delete files
 - the final file might be generated at a later time, long after the http req was returned
 
 - analyze the option of uploading directly to S3
+
+
+        <input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right">
+        <div class="all pull-right">
+            <input title="toggle all" type="checkbox" name="file" value="{{.ID}}">
+            <a href="#" download>Download</a>
+        </div>

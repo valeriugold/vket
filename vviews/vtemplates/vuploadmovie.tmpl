@@ -1,10 +1,9 @@
 {{define "title"}}Upload Movie{{end}}
 {{define "head"}}{{end}}
 {{define "content"}}
-<h1>Upload Movies</h1>
-<form action="uploadforevent" method="POST" enctype="multipart/form-data">
+<h1>Upload Movies for {{.Name}}</h1>
+<form action="uploadforevent?eventID={{.EventID}}" method="POST" enctype="multipart/form-data">
     <div class="form-group">
-        <input type="hidden" name="eventID" value="{{.}}"/>
         <label for="uploadforevent">Upload Movies</label>
         <input type="file" name="uploadforevent" id="uploadforevent" multiple="multiple"/>
         <!-- <input type="submit" name="submit" value="upload" /> -->

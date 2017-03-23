@@ -3,7 +3,7 @@
 {{define "content"}}
 <div class="list-group">
     {{range .}}
-    <a href="/uploadforevent?eventID={{.ID}}" class="list-group-item list-group-item-action">
+    <a href="/files?eventID={{.ID}}" class="list-group-item list-group-item-action">
         {{.ID}}, {{.Name}}, {{.UserID}}, {{.Status}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
   {{end}}
 </div>

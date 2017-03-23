@@ -126,7 +126,7 @@ func TestLocal(t *testing.T) {
 		t.Errorf("saveFile %d, %s, err: %v", eid, rcvName, err)
 	}
 	rf.Close()
-	defer DeleteData(eid, rcvName)
+	defer DeleteDataByEventIDName(eid, rcvName)
 
 	// get saved file from DB
 	nf, err := os.Create(testLocalLoadedFile)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,8 +50,9 @@ func (c *configuration) ParseJSON(b []byte) error {
 }
 
 type Configuration struct {
-	Port   int    `json:"port"`
-	Static string `json:"static"`
+	Port         int    `json:"Port"`
+	Static       string `json:"Static"`
+	FineUploader string `json:"FineUploader"`
 }
 
 // configuration values for the server
@@ -107,6 +109,8 @@ func main() {
 	//static file handler
 	// http.Handle("/bootstrap/", http.StripPrefix("/bootstrap/", http.FileServer(http.Dir("bootstrap-3.3.7-dist"))))
 	http.Handle("/bootstrap/", http.StripPrefix("/bootstrap/", http.FileServer(http.Dir(serverConfig.Static))))
+	http.Handle("/s3.fine-uploader/", http.StripPrefix("/s3.fine-uploader/", http.FileServer(http.Dir(serverConfig.FineUploader))))
+	http.Handle("/", stdChain.ThenFunc(AboutGET))
 	http.Handle("/login", stdChain.ThenFunc(LoginALL))
 	http.Handle("/register", stdChain.ThenFunc(RegisterALL))
 	http.Handle("/about", stdChain.ThenFunc(AboutGET))
@@ -115,9 +119,13 @@ func main() {
 	http.Handle("/hello", stdChain.ThenFunc(HelloGET))
 	// http.Handle("/uploadmovies", stdChain.ThenFunc(UploadMoviesALL))
 	http.Handle("/uploadforevent", stdChain.ThenFunc(UploadForEventALL))
+	http.Handle("/fineuploader-s3-ui", stdChain.ThenFunc(FineUploadForEventALL))
+	http.Handle("/filesop", stdChain.ThenFunc(FilesOpGET))
 
+	http.Handle("/files", stdChain.ThenFunc(FilesGET))
 	http.Handle("/logout", stdChain.ThenFunc(LogoutGET))
 	http.Handle("/exitNow", stdChain.ThenFunc(ExitNowGET))
+	http.Handle("/upldsign", stdChain.ThenFunc(UploadSignPOST))
 
 	err := http.ListenAndServe(":"+strconv.Itoa(serverConfig.Port), context.ClearHandler(http.DefaultServeMux))
 	// err := http.ListenAndServe(":9090", context.ClearHandler(http.DefaultServeMux))
@@ -147,6 +155,48 @@ func AboutGET(w http.ResponseWriter, r *http.Request) {
 	vviews.About(w)
 }
 
+func FilesOpGET(w http.ResponseWriter, r *http.Request) {
+	s, err := getAuthenticatedSession(w, r)
+	if err != nil {
+		return
+	}
+	s.Save(r, w)
+
+	r.ParseForm()
+	vlog.Info.Printf("PostForm = %v\n", r.PostForm)
+	if files, ok := r.PostForm["file"]; ok {
+		vlog.Info.Printf("these are files' values: %v", files)
+		// var buffer bytes.Buffer
+		// for _, f := range v {
+		// 	s := fmt.Sprintf("%s\n", f)
+		// 	buffer.WriteString(s)
+		// }
+		// fmt.Printf("POST files are:\n%s", buffer.String())
+		if a, ok := r.PostForm["action"]; ok {
+			vlog.Info.Printf("action = %v", a)
+			if len(a) == 1 {
+				if a[0] == "delete" {
+					vlog.Info.Printf("Delete files id %v", files)
+					for _, f := range files {
+						fid, err := stringToUint32(f)
+						if err != nil {
+							vlog.Warning.Printf("event file ID %s is not integer, err=%v", f, err)
+							continue
+						}
+						if err = vfiles.DeleteDataByEventFileID(fid); err != nil {
+							vlog.Warning.Printf("could not delete event file ID =%d, err=%v", fid, err)
+							http.Error(w, err.Error(), http.StatusInternalServerError)
+							return
+						}
+					}
+				} else if a[0] == "download" {
+					vlog.Info.Printf("Download files id %v", files)
+				}
+			}
+		}
+	}
+}
+
 func HelloGET(w http.ResponseWriter, r *http.Request) {
 	s, err := getAuthenticatedSession(w, r)
 	if err != nil {
@@ -168,11 +218,11 @@ func HelloGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadForEventALL(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
-	if err != nil {
-		return
-	}
-	s.Save(r, w)
+	// s, err := getAuthenticatedSession(w, r)
+	// if err != nil {
+	// 	return
+	// }
+	// s.Save(r, w)
 	vlog.Trace.Printf("r.Method: %s\n", r.Method)
 
 	if r.Method == "POST" {
@@ -183,24 +233,68 @@ func UploadForEventALL(w http.ResponseWriter, r *http.Request) {
 }
 
 func UploadForEventGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+	eventID := r.FormValue("eventID")
+	vlog.Trace.Printf("converting ev=%v", eventID)
+	eid, err := stringToUint32(eventID)
 	if err != nil {
+		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.Save(r, w)
-	eventID := r.FormValue("eventID")
+	ev, err := model.EventByEventID(eid)
+	x := struct {
+		Name    string
+		EventID string
+	}{Name: ev.Name, EventID: eventID}
+	vviews.UploadMovies(w, x)
+	// vviews.UploadMovies(w, ev.Name, eventID)
+}
 
-	vviews.UploadMovies(w, eventID)
+func FineUploadForEventALL(w http.ResponseWriter, r *http.Request) {
+	vlog.Trace.Printf("r.Method: %s\n", r.Method)
+
+	if r.Method == "POST" {
+		UploadForEventPOST(w, r)
+	} else {
+		FineUploadForEventGET(w, r)
+	}
+}
+
+func FineUploadForEventGET(w http.ResponseWriter, r *http.Request) {
+	eventID := r.FormValue("eventID")
+	vlog.Trace.Printf("FineUploader: converting ev=%v", eventID)
+	eid, err := stringToUint32(eventID)
+	if err != nil {
+		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	ev, err := model.EventByEventID(eid)
+	x := struct {
+		Name    string
+		EventID string
+	}{Name: ev.Name, EventID: eventID}
+	vviews.FineUploadMovies(w, x)
+	// vviews.UploadMovies(w, ev.Name, eventID)
 }
 
 func UploadForEventPOST(w http.ResponseWriter, r *http.Request) {
-	_, err := getAuthenticatedSession(w, r)
-	if err != nil {
+	vlog.Trace.Printf("Upload ...")
+	eventID := r.URL.Query().Get("eventID")
+	if len(eventID) == 0 {
+		vlog.Error.Printf("no eventID in URL")
+		http.Error(w, "no event ID in URL", http.StatusInternalServerError)
 		return
 	}
-	// ID := s.Values["ID"].(uint32)
+	// eventID := r.FormValue("eventID")
+	vlog.Trace.Printf("converting ev=%v", eventID)
+	eid, err := stringToUint32(eventID)
+	if err != nil {
+		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
-	vlog.Trace.Printf("Upload ...")
 	//get the multipart reader for the request.
 	reader, err := r.MultipartReader()
 	if err != nil {
@@ -208,18 +302,8 @@ func UploadForEventPOST(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// eventID := r.FormValue("eventID")
-	// vlog.Trace.Printf("converting ev=%v", eventID)
-	// eid, err := strconv.ParseUint(eventID, 10, 32)
-	// if err != nil {
-	// 	vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
-	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-	eid := 0
 	vlog.Trace.Printf("calling SaveMultipart")
-	if err = vfiles.SaveMultipart(uint32(eid), reader); err != nil {
+	if err = vfiles.SaveMultipart(eid, reader); err != nil {
 		vlog.Warning.Printf("err on SaveMultipart, err:%v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -357,6 +441,42 @@ func RegisterPOST(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
+func FilesGET(w http.ResponseWriter, r *http.Request) {
+	s, err := getAuthenticatedSession(w, r)
+	if err != nil {
+		return
+	}
+	s.Save(r, w)
+	// get all files for this event
+	eventID := r.FormValue("eventID")
+	eid, err := stringToUint32(eventID)
+	if err != nil {
+		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// check if the event belongs to this authenticated user
+	ev, err := model.EventByEventID(eid)
+	if err != nil {
+		vlog.Warning.Printf("Could not find event id %d, err:%v", eid, err)
+		vviews.Error(w, "Could not find event id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
+		return
+	}
+	userID := s.Values["ID"].(uint32)
+	if ev.UserID != userID {
+		vlog.Warning.Printf("event id %d does not belong to user %d", eid, userID)
+		vviews.Error(w, "event id "+fmt.Sprintf("%d", eid)+" does not belong to user "+fmt.Sprintf("%d", userID))
+		return
+	}
+	efs, err := model.EventFileGetAllForEventID(eid)
+	if err != nil {
+		vlog.Warning.Printf("Could not get files for events id %d, err:%v", eid, err)
+		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
+		return
+	}
+	vviews.FielesShow(w, ev, efs)
+}
+
 func EventsGET(w http.ResponseWriter, r *http.Request) {
 	s, err := getAuthenticatedSession(w, r)
 	if err != nil {
@@ -400,6 +520,69 @@ func NewEventPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.Redirect(w, r, "/events", http.StatusFound)
+}
+
+func UploadSignPOST(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "POST" {
+		vlog.Warning.Printf("Method is not POST, but %s", r.Method)
+		// VG: show error page
+		vviews.Error(w, "Method is not POST, but "+r.Method)
+		return
+	}
+	// func test(rw http.ResponseWriter, req *http.Request) {
+	// 	decoder := json.NewDecoder(req.Body)
+	// 	var t test_struct
+	// 	err := decoder.Decode(&t)
+	// 	if err != nil {
+	// 		panic(err)
+	// 	}
+	// 	defer req.Body.Close()
+	// 	log.Println(t.Test)
+	// }
+
+	// policy := make([]byte, 10240)
+	// _, err := r.Body.Read(policy)
+	buf := new(bytes.Buffer)
+	_, err := buf.ReadFrom(r.Body)
+	if err != nil {
+		vlog.Warning.Printf("Reading req body err: %v", err)
+		return
+	}
+	base64Policy, s3Signature, err := GetSignedPolicy("us-east-1", AWSSecretAccessKey, buf.Bytes())
+	if err != nil {
+		vlog.Warning.Printf("GetSignedPolicy err: %v", err)
+		return
+	}
+	vlog.Trace.Printf("base64Policy=%s\n", base64Policy)
+	vlog.Trace.Printf("s3Signature=%s\n", s3Signature)
+	resp := struct {
+		Policy    string `json:"policy"`
+		Signature string `json:"signature"`
+	}{Policy: base64Policy, Signature: s3Signature}
+	jr, err := json.Marshal(resp)
+	if err != nil {
+		vlog.Warning.Printf("Marshal err: %v", err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write(jr)
+	// $response = array('policy' => $encodedPolicy, 'signature' => signV4Policy($encodedPolicy, $policyObj))
+	// // Save a copy of this request for debugging.
+	// requestDump, err := httputil.DumpRequest(r, true)
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// fmt.Println(string(requestDump))
+}
+
+func stringToUint32(s string) (n uint32, err error) {
+	x, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		vlog.Warning.Printf("stringToUint32 s=%s, err=%v", s, err)
+		return
+	}
+	n = uint32(x)
+	return
 }
 
 // func (w http.ResponseWriter, r *http.Request) {
