@@ -1,11 +1,5 @@
 .DS_Store
-aaa.json
-bootstrap-3.3.7-dist/
-pages/
+static/
 vket
-template/
-vfiles/tmp/
-#vmodel/
-vusers/
 s3_secret.go
 *compilation*

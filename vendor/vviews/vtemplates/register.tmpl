@@ -1,0 +1,11 @@
+{{define "title"}}REGISTER{{end}}
+{{define "head"}}{{end}}
+{{define "content"}}
+    <form action="/register" method="POST">
+        Register here<br>
+        {{range .}}
+            {{.}}:<div><input type="text" name="{{.}}" size="60"></div><br>
+        {{end}}
+        <div><input type="submit" value="REGISTER"></div>
+    </form>
+{{end}}
