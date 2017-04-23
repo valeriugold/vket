@@ -1,0 +1,10 @@
+{{define "title"}}EVENTS{{end}}
+{{define "head"}}{{end}}
+{{define "content"}}
+<div class="list-group">
+    {{range .}}
+    <a href="/files?eventID={{.ID}}" class="list-group-item list-group-item-action">
+        {{.ID}}, {{.Name}}, {{.UserID}}, {{.Status}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
+  {{end}}
+</div>
+{{end}}

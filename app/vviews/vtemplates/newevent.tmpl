@@ -1,0 +1,11 @@
+{{define "title"}}NEW EVENT{{end}}
+{{define "head"}}{{end}}
+{{define "content"}}
+    <form action="/newevent" method="POST">
+        Enter the new event data:<br>
+        {{range .}}
+            {{.}}:<div><input type="text" name="{{.}}" size="60"></div><br>
+        {{end}}
+        <div><input type="submit" value="NEWEVENT"></div>
+    </form>
+{{end}}

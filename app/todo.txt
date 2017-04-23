@@ -1,0 +1,66 @@
+services:
+upload files (where? for what event?)
+download
+
+1 skeleton with auth
+2 upload files
+3 show file list
+3 download files
+
+register
+login
+see login page
+logout
+
+
+- define first prototype: what features will it have:
+  - no events
+  - no S3
+  - show files / user
+  - download files one by one
+  - remove files
+  - watch files?
+
+first prototype:
+1
+create user
+upload files: store original name,size,md5sum
+show files, original name, original size, original md5sum, stored name, stored size, stored md5sum
+delete files
+download files
+when files are uploaded, they are stored locally
+
+2 save on S3
+
+3 download files bundled together
+
+4 transcode files
+
+5 create events, associate files with events
+
+6 use different roles for upload/download
+
+
+todo now:
+upload files: store original name,size,md5sum
+show files
+delete files
+
+
+
+- organize files per user/ event
+- show current files
+- there will be a intermediary func for transcoding, the final files will be stored transcoded to a common format... or not?
+- modify DB and code to allow soring originalMd5sum (in user_file) before file gets transcoded
+- the final file might be generated at a later time, long after the http req was returned
+
+- analyze the option of uploading directly to S3
+
+
+        <input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right">
+        <div class="all pull-right">
+            <input title="toggle all" type="checkbox" name="file" value="{{.ID}}">
+            <a href="#" download>Download</a>
+        </div>
+
+https://engineroom.teamwork.com/how-to-securely-provide-a-zip-download-of-a-s3-file-bundle/

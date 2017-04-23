@@ -1,0 +1,26 @@
+<html> 
+  <head>
+    <title>S3 POST Form</title> 
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  </head>
+
+  <body> 
+    <form action="https://vket.s3.amazonaws.com/" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="Content-Type" value="multipart/form-data">
+      <input type="hidden" name="key" value="user/vg/${filename}">
+      <input type="hidden" name="acl" value="private"> 
+      <input type="hidden" name="success_action_redirect" value="http://localhost:9090/hello">
+      <input type="hidden" name="x-amz-credential" value="AKIAI3WUHSIINGF2M3RQ/20170311/us-east-1/s3/aws4_request">
+      <input type="hidden" name="x-amz-algorithm" value="AWS4-HMAC-SHA256">
+      <input type="hidden" name="x-amz-date" value="20170311T000000Z">
+      <input type="hidden" name="policy" value="eyAiZXhwaXJhdGlvbiI6ICIyMDE3LTEyLTAxVDEyOjAwOjAwLjAwMFoiLAogICJjb25kaXRpb25zIjogWwogICAgeyJidWNrZXQiOiAidmtldCJ9LAogICAgWyJzdGFydHMtd2l0aCIsICIka2V5IiwgInVzZXIvdmcvIl0sCiAgICBbInN0YXJ0cy13aXRoIiwgIiRDb250ZW50LVR5cGUiLCAibXVsdGlwYXJ0LyJdLAogICAgeyJhY2wiOiAicHJpdmF0ZSJ9LAogICAgeyJzdWNjZXNzX2FjdGlvbl9yZWRpcmVjdCI6ICJodHRwOi8vbG9jYWxob3N0OjkwOTAvaGVsbG8ifSwKCiAgICB7IngtYW16LWNyZWRlbnRpYWwiOiAiQUtJQUkzV1VIU0lJTkdGMk0zUlEvMjAxNzAzMTEvdXMtZWFzdC0xL3MzL2F3czRfcmVxdWVzdCJ9LAogICAgeyJ4LWFtei1hbGdvcml0aG0iOiAiQVdTNC1ITUFDLVNIQTI1NiJ9LAogICAgeyJ4LWFtei1kYXRlIjogIjIwMTcwMzExVDAwMDAwMFoifQogIF0KfQ==">
+      <input type="hidden" name="x-amz-signature" value="d8a57ba5211929d0597b2d3e72d3d1fcc55c3695295042d6f34f5de97419512c">
+      <!-- Include any additional input fields here -->
+
+      File to upload to S3: 
+      <input name="file" type="file"> 
+      <br> 
+      <input type="submit" value="Upload File to S3"> 
+    </form> 
+  </body>
+</html>
