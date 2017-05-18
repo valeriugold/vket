@@ -12,6 +12,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/gorilla/context"
 	"github.com/gorilla/handlers"
@@ -27,10 +28,20 @@ import (
 )
 
 var uploader = vfineuploader.New()
-var vr = vmodel.New()
 var vs = vs3.New()
+var vr = vmodel.New(vs)
 
 var store = sessions.NewCookieStore([]byte("secret-project"))
+
+// VSession holds all user data from a user session
+type VSession struct {
+	Authenticated bool
+	UserID        uint32
+	Email         string
+	Role          string
+	FirstName     string
+	LastName      string
+}
 
 // config the settings variable
 var config = &configuration{}
@@ -54,6 +65,7 @@ func (c *configuration) ParseJSON(b []byte) error {
 	return json.Unmarshal(b, &c)
 }
 
+// Configuration holds configuration for vket http service
 type Configuration struct {
 	Port         int    `json:"Port"`
 	Static       string `json:"Static"`
@@ -63,7 +75,7 @@ type Configuration struct {
 // configuration values for the server
 var serverConfig Configuration
 
-// InitConfiguration: copy configuration to local config variable
+// InitConfiguration copy configuration to local config variable
 func InitConfiguration(c Configuration) {
 	serverConfig = c
 	log.Printf("server: %v\n", serverConfig)
@@ -126,7 +138,9 @@ func main() {
 	http.Handle("/hello", stdChain.ThenFunc(HelloGET))
 	// http.Handle("/uploadmovies", stdChain.ThenFunc(UploadMoviesALL))
 	http.Handle("/fineuploader-s3-ui", stdChain.ThenFunc(FineUploadForEventGET))
-	http.Handle("/filesop", stdChain.ThenFunc(FilesOpGET))
+	http.Handle("/filesop", stdChain.ThenFunc(FilesOpPOST))
+
+	http.Handle("/editorevents", stdChain.ThenFunc(EditorEventsGET))
 
 	http.Handle("/files", stdChain.ThenFunc(FilesGET))
 	http.Handle("/logout", stdChain.ThenFunc(LogoutGET))
@@ -141,20 +155,60 @@ func main() {
 	}
 }
 
-func getAuthenticatedSession(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
+func authenticatedSessionSet(w http.ResponseWriter, r *http.Request, vsess VSession) (*sessions.Session, error) {
 	s, err := store.Get(r, "session-x")
 	if err != nil {
 		vlog.Warning.Println("err on getting session ", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return nil, err
+		return s, err
 	}
 
-	if s.Values["authenticated"] == nil || s.Values["authenticated"].(string) != "yes" {
+	s.Values["ID"] = vsess.UserID
+	s.Values["authenticated"] = vsess.Authenticated
+	s.Values["email"] = vsess.Email
+	s.Values["role"] = vsess.Role
+	s.Values["firstName"] = vsess.FirstName
+	s.Values["lastName"] = vsess.LastName
+	s.Save(r, w)
+	return s, nil
+}
+
+func authenticatedSessionClear(w http.ResponseWriter, r *http.Request) (*sessions.Session, error) {
+	s, _, err := authenticatedSessionGet(w, r)
+	if err != nil {
+		return s, err
+	}
+	for k := range s.Values {
+		delete(s.Values, k)
+	}
+	s.Save(r, w)
+	return s, nil
+}
+
+func authenticatedSessionGet(w http.ResponseWriter, r *http.Request) (*sessions.Session, *VSession, error) {
+	s, err := store.Get(r, "session-x")
+	if err != nil {
+		vlog.Warning.Println("err on getting session ", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return nil, nil, err
+	}
+
+	_, ok := s.Values["authenticated"]
+	if !ok || !s.Values["authenticated"].(bool) {
 		vlog.Info.Println("not authenticated")
 		vviews.Error(w, "the context is not authenticated")
-		return s, errors.New("not authenticated")
+		return s, nil, errors.New("not authenticated")
 	}
-	return s, nil
+	// get all values for this session
+	var vsess VSession
+	vsess.Authenticated = true
+	vsess.UserID = s.Values["ID"].(uint32)
+	vsess.Email = s.Values["email"].(string)
+	vsess.Role = s.Values["role"].(string)
+	vsess.FirstName = s.Values["firstName"].(string)
+	vsess.LastName = s.Values["lastName"].(string)
+	s.Save(r, w)
+	return s, &vsess, nil
 }
 
 // AboutGET controller section
@@ -162,32 +216,24 @@ func AboutGET(w http.ResponseWriter, r *http.Request) {
 	vviews.About(w)
 }
 
-func FilesOpGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+func FilesOpPOST(w http.ResponseWriter, r *http.Request) {
+	_, vsess, err := authenticatedSessionGet(w, r)
 	if err != nil {
 		return
 	}
-	s.Save(r, w)
 
-	eventID := r.FormValue("eventID")
-	eid, err := stringToUint32(eventID)
+	// check if user can acccess the files
+	ev, err := GetEventFromFormCheckAccess(r, vsess)
 	if err != nil {
-		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		vlog.Warning.Printf("Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// check if the event belongs to this authenticated user
-	ev, err := vmodel.EventByEventID(eid)
-	if err != nil {
-		vlog.Warning.Printf("Could not find event id %d, err:%v", eid, err)
-		vviews.Error(w, "Could not find event id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
-		return
-	}
-	userID := s.Values["ID"].(uint32)
-	if ev.UserID != userID {
-		vlog.Warning.Printf("event id %d does not belong to user %d", eid, userID)
-		vviews.Error(w, "event id "+fmt.Sprintf("%d", eid)+" does not belong to user "+fmt.Sprintf("%d", userID))
-		return
+
+	areEditedFiles := false
+	// form's filestype can be original or edited
+	if filesType := r.FormValue("filesType"); filesType == "edited" {
+		areEditedFiles = true
 	}
 
 	requestDump, err := httputil.DumpRequest(r, true)
@@ -211,20 +257,47 @@ func FilesOpGET(w http.ResponseWriter, r *http.Request) {
 		if a, ok := r.PostForm["action"]; ok {
 			vlog.Info.Printf("action = %v", a)
 			if len(a) == 1 {
+				// get the slice on which the operation is allowed
+				if areEditedFiles {
+					efids = vmodel.GetEditedFidsAllowedOp(a[0], vsess.UserID, vsess.Role, efids)
+				} else {
+					efids = vmodel.GetOriginalFidsAllowedOp(a[0], vsess.UserID, vsess.Role, efids)
+				}
 				if a[0] == "delete" {
-					vlog.Info.Printf("Delete files id %v", files)
+					vlog.Info.Printf("Delete files id %v", efids)
 					for _, efid := range efids {
-						vlog.Info.Printf("delete event file ID =%d", efid)
-						if err = vr.DeleteDataByEventFileID(efid); err != nil {
-							vlog.Warning.Printf("could not delete event file ID =%d, err=%v", efid, err)
-							http.Error(w, err.Error(), http.StatusInternalServerError)
-							return
+						if areEditedFiles {
+							vlog.Info.Printf("delete edited file ID =%d", efid)
+							if err = vr.DeleteDataByEditedFileID(efid); err != nil {
+								vlog.Warning.Printf("could not delete edited file ID =%d, err=%v", efid, err)
+								http.Error(w, err.Error(), http.StatusInternalServerError)
+								return
+							}
+						} else {
+							vlog.Info.Printf("delete event file ID =%d", efid)
+							if err = vr.DeleteDataByEventFileID(efid); err != nil {
+								vlog.Warning.Printf("could not delete event file ID =%d, err=%v", efid, err)
+								http.Error(w, err.Error(), http.StatusInternalServerError)
+								return
+							}
 						}
 					}
+					// show the files page without the deleted files
+					efs, err := vmodel.EventFileGetAllForEventID(ev.ID)
+					if err != nil {
+						vlog.Warning.Printf("Could not get files for events id %d, err:%v", ev.ID, err)
+						vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
+						return
+					}
+
+					vlog.Info.Printf("FielesShow: ev=%v, efs=%v", ev, efs)
+					// http.Redirect(w, r, "/files?eventID=15", 303)
+					RunDisplayFiles(w, ev, vsess)
+					// vviews.FielesShow(w, ev, efs, true)
 				} else if a[0] == "download" {
 					vlog.Info.Printf("Download files id %v", files)
 					zpr := vs.GetZipper()
-					if err = vr.DownloadFiles(w, r, userID, eid, efids, zpr); err != nil {
+					if err = vr.DownloadFiles(w, r, ev.ID, areEditedFiles, efids, zpr); err != nil {
 						vlog.Warning.Printf("could not download, err=%v", err)
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -236,49 +309,53 @@ func FilesOpGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func HelloGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+	_, vsess, err := authenticatedSessionGet(w, r)
 	if err != nil {
 		return
 	}
-	s.Save(r, w)
-	email := s.Values["email"].(string)
-	user, err := vmodel.UserByEmail(email)
+	user, err := vmodel.UserByEmail(vsess.Email)
 	if err != nil {
-		vlog.Warning.Printf("error on UserByEmail(%s) = %v", email, err)
+		vlog.Warning.Printf("error on UserByEmail(%s) = %v", vsess.Email, err)
 	} else {
-		vlog.Trace.Printf("user email %s = %v", email, user)
+		vlog.Trace.Printf("user email %s = %v", vsess.Email, user)
 	}
 	//FormatUint(, base int) string
-	vviews.Hello(w, fmt.Sprintf("%d", s.Values["ID"].(uint32)),
-		s.Values["email"].(string), user.Email, s.Values["role"].(string),
+	vviews.Hello(w, fmt.Sprintf("%d", vsess.UserID),
+		vsess.Email, user.Email, vsess.Role,
 		user.Role, user.FirstName, user.LastName, user.Password,
 		fmt.Sprintf("%d", user.ID))
 }
 
 func FineUploadForEventGET(w http.ResponseWriter, r *http.Request) {
-	eventID := r.FormValue("eventID")
-	vlog.Trace.Printf("FineUploader: converting ev=%v", eventID)
-	eid, err := stringToUint32(eventID)
+	_, vsess, _ := authenticatedSessionGet(w, r)
+	// it is ok to ignore authentication errors, vsess can be nil for this function
+	// check if user can acccess the files
+	ev, err := GetEventFromFormCheckAccess(r, vsess)
 	if err != nil {
-		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		vlog.Warning.Printf("Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	ev, err := vmodel.EventByEventID(eid)
+	userID := ev.UserID
+	editorID := uint32(0)
+	if vsess != nil && vsess.Role == "editor" {
+		userID = vsess.UserID
+		editorID = vsess.UserID
+	}
 	x := struct {
-		Name    string
-		EventID string
-		UserID  uint32
-	}{Name: ev.Name, EventID: eventID, UserID: ev.UserID}
+		Name     string
+		EventID  uint32
+		UserID   uint32
+		EditorID uint32
+	}{Name: ev.Name, EventID: ev.ID, UserID: userID, EditorID: editorID}
 	vviews.FineUploadMovies(w, x)
 }
 
 // func UploadMoviesALL(w http.ResponseWriter, r *http.Request) {
-// 	s, err := getAuthenticatedSession(w, r)
+// 	s, vsess, err := authenticatedSessionGet(w, r)
 // 	if err != nil {
 // 		return
 // 	}
-// 	s.Save(r, w)
 // 	vlog.Trace.Printf("r.Method: %s\n", r.Method)
 // 	if r.Method == "POST" {
 // 		UploadMoviesPOST(w, r)
@@ -287,26 +364,24 @@ func FineUploadForEventGET(w http.ResponseWriter, r *http.Request) {
 // 	}
 // }
 // func UploadMoviesGET(w http.ResponseWriter, r *http.Request) {
-// 	s, err := getAuthenticatedSession(w, r)
+// 	s, vsess, err := authenticatedSessionGet(w, r)
 // 	if err != nil {
 // 		return
 // 	}
-// 	s.Save(r, w)
 // 	vviews.UploadMovies(w)
 // }
 // func UploadMoviesPOST(w http.ResponseWriter, r *http.Request) {
-// 	s, err := getAuthenticatedSession(w, r)
+// 	s, vsess, err := authenticatedSessionGet(w, r)
 // 	if err != nil {
 // 		return
 // 	}
-// 	ID := s.Values["ID"].(uint32)
 // 	//get the multipart reader for the request.
 // 	reader, err := r.MultipartReader()
 // 	if err != nil {
 // 		http.Error(w, err.Error(), http.StatusInternalServerError)
 // 		return
 // 	}
-// 	if err = vfiles.SaveMultipart(ID, reader); err != nil {
+// 	if err = vfiles.SaveMultipart(vsess.UserID, reader); err != nil {
 // 		http.Error(w, err.Error(), http.StatusInternalServerError)
 // 		return
 // 	}
@@ -320,15 +395,7 @@ func ExitNowGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func LogoutGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
-	if err != nil {
-		return
-	}
-	// Clear out all stored values in the cookie
-	for k := range s.Values {
-		delete(s.Values, k)
-	}
-	s.Save(r, w)
+	_, _ = authenticatedSessionClear(w, r)
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
@@ -357,19 +424,16 @@ func LoginPOST(w http.ResponseWriter, r *http.Request) {
 		vviews.Error(w, "wrong pass for user with email "+email)
 		return
 	}
-	s, err := store.Get(r, "session-x")
+	_, err = authenticatedSessionSet(w, r, VSession{
+		Authenticated: true,
+		UserID:        user.ID,
+		Email:         email,
+		Role:          user.Role,
+		FirstName:     user.FirstName,
+		LastName:      user.LastName})
 	if err != nil {
-		vlog.Warning.Println("err on getting session ", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	s.Values["email"] = email
-	s.Values["authenticated"] = "yes"
-	s.Values["role"] = user.Role
-	s.Values["firstName"] = user.FirstName
-	s.Values["lastName"] = user.LastName
-	s.Values["ID"] = user.ID
-	s.Save(r, w)
 	http.Redirect(w, r, "/hello", http.StatusFound)
 }
 
@@ -400,58 +464,146 @@ func RegisterPOST(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
-func FilesGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
-	if err != nil {
-		return
-	}
-	s.Save(r, w)
-	// get all files for this event
+func GetEventFromFormCheckAccess(r *http.Request, vsess *VSession) (ev vmodel.Event, err error) {
 	eventID := r.FormValue("eventID")
 	eid, err := stringToUint32(eventID)
 	if err != nil {
-		vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		// vlog.Warning.Printf("eventID=%s is not integer, err=%v", eventID, err)
+		// http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	// check if the event belongs to this authenticated user
-	ev, err := vmodel.EventByEventID(eid)
+	ev, err = vmodel.EventGetByEventID(eid)
 	if err != nil {
-		vlog.Warning.Printf("Could not find event id %d, err:%v", eid, err)
-		vviews.Error(w, "Could not find event id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
+		// vlog.Warning.Printf("Could not find event id %d, err:%v", eid, err)
+		// vviews.Error(w, "Could not find event id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
 		return
 	}
-	userID := s.Values["ID"].(uint32)
-	if ev.UserID != userID {
-		vlog.Warning.Printf("event id %d does not belong to user %d", eid, userID)
-		vviews.Error(w, "event id "+fmt.Sprintf("%d", eid)+" does not belong to user "+fmt.Sprintf("%d", userID))
+	if vsess == nil {
+		// if there is no session, the access is granted; the check for session should have taken place earlier
 		return
 	}
-	efs, err := vmodel.EventFileGetAllForEventID(eid)
+	allow, err := canAccessEvent(ev, vsess)
 	if err != nil {
-		vlog.Warning.Printf("Could not get files for events id %d, err:%v", eid, err)
-		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", eid)+" error="+err.Error())
 		return
 	}
-	vviews.FielesShow(w, ev, efs)
+	if !allow {
+		err = errors.New("User does not have permission to access event")
+		return
+	}
+	return
+}
+
+func FilesGET(w http.ResponseWriter, r *http.Request) {
+	_, vsess, err := authenticatedSessionGet(w, r)
+	if err != nil {
+		return
+	}
+	// check if user can acccess the files
+	ev, err := GetEventFromFormCheckAccess(r, vsess)
+	if err != nil {
+		vlog.Warning.Printf("Error: %v", err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	RunDisplayFiles(w, ev, vsess)
+}
+
+func RunDisplayFiles(w http.ResponseWriter, ev vmodel.Event, vsess *VSession) {
+	// get original files
+	efs, err := vmodel.EventFileGetAllForEventID(ev.ID)
+	if err != nil {
+		vlog.Warning.Printf("Could not get files for events id %d, err:%v", ev.ID, err)
+		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
+		return
+	}
+	// get edited files
+	var dfs []vmodel.EditedFile
+	if vsess.Role == "editor" {
+		dfs, err = vmodel.EditedFileGetAllForEventIDEditorID(ev.ID, vsess.UserID)
+	} else {
+		dfs, err = vmodel.EditedFileGetAllForEventID(ev.ID)
+	}
+	if err != nil {
+		vlog.Warning.Printf("Could not get edited files for events id %d, editor %d err:%v", ev.ID, vsess.UserID, err)
+		vviews.Error(w, "Could not get edited events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
+		return
+	}
+	vlog.Info.Printf("FielesShow: ev=%v, efs=%v, dfs=%v", ev, efs, dfs)
+	vviews.FielesShow(w, ev, efs, dfs, vsess.Role)
 }
 
 func EventsGET(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+	_, vsess, err := authenticatedSessionGet(w, r)
 	if err != nil {
 		return
 	}
-	s.Save(r, w)
 	// get all events for this user
-	userID := s.Values["ID"].(uint32)
-	evs, err := vmodel.EventGetAllForUserID(userID)
+	evs, err := vmodel.EventGetAllForUserID(vsess.UserID)
 	if err != nil {
-		vlog.Warning.Printf("Could not get events for user id %d, err:%v", userID, err)
-		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", userID)+" error="+err.Error())
+		vlog.Warning.Printf("Could not get events for user id %d, err:%v", vsess.UserID, err)
+		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", vsess.UserID)+" error="+err.Error())
 		return
 	}
 	vviews.EventsShow(w, evs)
 }
+
+func EditorEventsGET(w http.ResponseWriter, r *http.Request) {
+	_, vsess, err := authenticatedSessionGet(w, r)
+	if err != nil {
+		return
+	}
+	// check that there is really an editor
+	if vsess.Role != "editor" {
+		vlog.Warning.Printf("user id %d is %s not editor", vsess.UserID, vsess.Role)
+		vviews.Error(w, "Only editors can see editor events")
+		return
+	}
+	// get all events for this editor
+	ees, err := vmodel.EditorEventGetByEditorID(vsess.UserID)
+	if err != nil {
+		vlog.Warning.Printf("Could not get editor-events for editor with user id %d, err:%v", vsess.UserID, err)
+		vviews.Error(w, "Could not get editor-events for editor with user id "+fmt.Sprintf("%d", vsess.UserID)+" error="+err.Error())
+		return
+	}
+	type eeDesc struct {
+		UserID        uint32
+		UserNameFirst string
+		UserNameLast  string
+		UserEmail     string
+		EventID       uint32
+		EventName     string
+		EventStatus   string
+		CreatedAt     time.Time
+		UpdatedAt     time.Time
+	}
+	list := make([]eeDesc, 0, len(ees))
+	for _, ee := range ees {
+		ev, err := vmodel.EventGetByEventID(ee.EventID)
+		if err != nil {
+			vlog.Warning.Printf("err on EventGetByEventID(%d) = %v", ee.EventID, err)
+			continue
+		}
+		us, err := vmodel.UserGetByID(ev.UserID)
+		if err != nil {
+			vlog.Warning.Printf("err on UserGetByID(%d), evid=%d, err=%v", ev.UserID, ee.EventID, err)
+			continue
+		}
+		x := eeDesc{
+			UserID:        ev.UserID,
+			UserNameFirst: us.FirstName,
+			UserNameLast:  us.LastName,
+			UserEmail:     us.Email,
+			EventID:       ev.ID,
+			EventName:     ev.Name,
+			EventStatus:   ev.Status,
+			CreatedAt:     ev.CreatedAt,
+			UpdatedAt:     ev.UpdatedAt}
+		list = append(list, x)
+	}
+	vviews.EditorEventsShow(w, list)
+}
+
 func NewEventALL(w http.ResponseWriter, r *http.Request) {
 	if r.Method == "POST" {
 		NewEventPOST(w, r)
@@ -463,19 +615,17 @@ func NewEventGET(w http.ResponseWriter, r *http.Request) {
 	vviews.NewEvent(w, "eventName")
 }
 func NewEventPOST(w http.ResponseWriter, r *http.Request) {
-	s, err := getAuthenticatedSession(w, r)
+	_, vsess, err := authenticatedSessionGet(w, r)
 	if err != nil {
 		return
 	}
-	s.Save(r, w)
 
 	evName := r.FormValue("eventName")
-	userID := s.Values["ID"].(uint32)
-	err = vmodel.EventCreate(userID, evName)
+	err = vmodel.EventCreate(vsess.UserID, evName)
 	if err != nil {
-		vlog.Warning.Printf("Create event for user id %d returned err=%s", userID, err.Error())
+		vlog.Warning.Printf("Create event for user id %d returned err=%s", vsess.UserID, err.Error())
 		// VG: show error page
-		vviews.Error(w, "Create event for user id "+fmt.Sprintf("%d", userID)+" error="+err.Error())
+		vviews.Error(w, "Create event for user id "+fmt.Sprintf("%d", vsess.UserID)+" error="+err.Error())
 		return
 	}
 	http.Redirect(w, r, "/events", http.StatusFound)
@@ -518,6 +668,25 @@ func stringToUint32(s string) (n uint32, err error) {
 	}
 	n = uint32(x)
 	return
+}
+
+func canAccessEvent(ev vmodel.Event, vsess *VSession) (bool, error) {
+	if ev.UserID == vsess.UserID {
+		return true, nil
+	}
+	// check if vsess.UserID is editor and if there is an association in editor_event
+	if vsess.Role != "editor" {
+		return false, nil
+	}
+	_, err := vmodel.EditorEventGetByEditorEventID(vsess.UserID, ev.ID)
+	if err == nil {
+		return true, nil
+	}
+	if err == vmodel.ErrNoResult {
+		// this is not an error, but missing permission
+		err = nil
+	}
+	return false, err
 }
 
 // func (w http.ResponseWriter, r *http.Request) {

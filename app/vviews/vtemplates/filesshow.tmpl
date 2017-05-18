@@ -1,19 +1,41 @@
 {{define "title"}}FILES{{end}}
 {{define "head"}}{{end}}
 {{define "content"}}
-<h1>Files for event: {{.Event.Name}}, id: {{.Event.ID}}, belonging to UserID: {{.Event.UserID}}</h1>
+<h1>Original files for event: {{.Event.Name}}, id: {{.Event.ID}}, belonging to UserID: {{.Event.UserID}}</h1>
 <form action="/filesop" method="post">
     <input type="hidden" name="eventID" value="{{.Event.ID}}"> 
+    <input type="hidden" name="filesType" value="original"> 
 <div class="list-group">
-    {{range .Files}}
+    {{range .FilesOriginal}}
     <a href="#" class="list-group-item"><input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right"> {{.ID}}, {{.Name}}, {{.EventID}}, {{.StoredFileID}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
     {{end}}
 </div>
 <div class="form-group">
-    <button type="submit" class="btn btn-default" name="action" value="delete">delete selected</button>
     <button type="submit" class="btn btn-default" name="action" value="download">download them</button>
+    {{if eq .Role "user"}}
+    <button type="submit" class="btn btn-default" name="action" value="delete">delete selected</button>
+    {{end}}
 </div>
 </form>
+
+<h1>Edited files for event: {{.Event.Name}}, id: {{.Event.ID}}, belonging to UserID: {{.Event.UserID}}</h1>
+<form action="/filesop" method="post">
+    <input type="hidden" name="eventID" value="{{.Event.ID}}"> 
+    <input type="hidden" name="filesType" value="edited"> 
+<div class="list-group">
+    {{range .FilesEdited}}
+    <a href="#" class="list-group-item"><input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right"> {{.EditorID}}, {{.ID}}, {{.Name}}, {{.EventID}}, {{.StoredFileID}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
+    {{end}}
+</div>
+<div class="form-group">
+    <button type="submit" class="btn btn-default" name="action" value="download">download them</button>
+    {{if eq .Role "editor"}}
+    <button type="submit" class="btn btn-default" name="action" value="delete">delete selected</button>
+    {{end}}
+</div>
+</form>
+
+
 <!--<a href="/uploadforevent?eventID={{.Event.ID}}" class="btn btn-info" role="button">Add File</a>-->
 <a href="/fineuploader-s3-ui?eventID={{.Event.ID}}" class="btn btn-info" role="button">Add File</a>
 {{end}}

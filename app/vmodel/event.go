@@ -21,8 +21,8 @@ type Event struct {
 	UpdatedAt time.Time `db:"updated_at" bson:"updated_at"`
 }
 
-// EventByName gets event information by UserID and Name
-func EventByUserIDName(userID uint32, name string) (Event, error) {
+// EventGetByUserIDName gets event information by UserID and Name
+func EventGetByUserIDName(userID uint32, name string) (Event, error) {
 	var err error
 
 	result := Event{}
@@ -38,8 +38,8 @@ func EventByUserIDName(userID uint32, name string) (Event, error) {
 	return result, standardizeError(err)
 }
 
-// EventByEventID gets event information by EventID
-func EventByEventID(eventID uint32) (Event, error) {
+// EventGetByEventID gets event information by EventID
+func EventGetByEventID(eventID uint32) (Event, error) {
 	var err error
 
 	result := Event{}
@@ -82,6 +82,13 @@ func EventCreate(userID uint32, name string) error {
 			name, userID, "open")
 	default:
 		err = ErrCode
+	}
+
+	// automatically add all events to editor id 1
+	if err == nil {
+		if ev, err := EventGetByUserIDName(userID, name); err == nil {
+			EditorEventCreate(1, ev.ID)
+		}
 	}
 
 	return standardizeError(err)

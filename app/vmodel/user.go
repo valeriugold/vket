@@ -23,6 +23,22 @@ type User struct {
 	UpdatedAt time.Time `db:"updated_at" bson:"updated_at"`
 }
 
+// UserGetByID gets user information from ID
+func UserGetByID(id uint32) (User, error) {
+	var err error
+
+	result := User{}
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		err = database.SQL.Get(&result, "SELECT * FROM user WHERE ID = ? LIMIT 1", id)
+	default:
+		err = ErrCode
+	}
+
+	return result, standardizeError(err)
+}
+
 // UserByEmail gets user information from email
 func UserByEmail(email string) (User, error) {
 	var err error

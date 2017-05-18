@@ -1,9 +1,12 @@
 package vs3
 
 import (
+	"os"
+
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/valeriugold/vket/app/shared/vlog"
 	"github.com/valeriugold/vket/app/vcloud"
 	"github.com/valeriugold/vket/app/vcloud/vs3/vsecret"
 	"github.com/valeriugold/vket/app/vcloud/vs3/vzipfiles"
@@ -14,8 +17,8 @@ type vS3Account struct {
 	aWSRegion          string
 	aWSBucket          string
 	zip                vzipfiles.Zipper
-	sess               session.Session
-	svc                s3.S3
+	svc                *s3.S3
+	// sess               *session.Session
 }
 
 func New() vcloud.VCloud {
@@ -23,6 +26,15 @@ func New() vcloud.VCloud {
 	vs.aWSSecretAccessKey = vsecret.AWSSecretAccessKey
 	vs.aWSRegion = vsecret.AWSRegion
 	vs.aWSBucket = vsecret.AWSBucket
+	// sess := session.New(&aws.Config{Region: aws.String(vsecret.AWSRegion)})
+	// sess := session.NewSession(&aws.Config{Region: aws.String(vsecret.AWSRegion)})
+	sess, err := session.NewSession(aws.NewConfig().WithRegion(vsecret.AWSRegion))
+	if err != nil {
+		vlog.Error.Printf("Err creating session: %v", err)
+		os.Exit(1)
+	}
+	vs.svc = s3.New(sess)
+
 	vs.zip = vzipfiles.NewZipMaker(vsecret.AWSAccessKey, vsecret.AWSSecretAccessKey, vsecret.AWSRegion, vsecret.AWSBucket)
 	return vs
 }
@@ -33,14 +45,11 @@ func (vs *vS3Account) SignPolicy(policy []byte) (base64Policy, s3Signature strin
 
 func (vs *vS3Account) DeleteFile(key string) error {
 	// delete file key
-	sess := session.New(&aws.Config{Region: aws.String("us-east-1")})
-	svc := s3.New(sess)
-
 	params := &s3.DeleteObjectInput{
 		Bucket: aws.String(vs.aWSBucket), // Required
 		Key:    aws.String(key),          // Required
 	}
-	_, err := svc.DeleteObject(params)
+	_, err := vs.svc.DeleteObject(params)
 
 	if err != nil {
 		// Print the error, cast err to awserr.Error to get the Code and

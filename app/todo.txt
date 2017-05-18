@@ -64,3 +64,11 @@ delete files
         </div>
 
 https://engineroom.teamwork.com/how-to-securely-provide-a-zip-download-of-a-s3-file-bundle/
+
+
+where to show edited_files
+event files
+
+Where to upload edited_files
+event files for editors: editors should be able to open events that don't belong to them; open from menu...
+needs eventID

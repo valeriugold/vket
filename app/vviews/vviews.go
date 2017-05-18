@@ -34,9 +34,9 @@ var dir = "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/app/vviews/vte
 // Init should be called automatically when this package is used
 func Init() {
 	names := []string{"about", "error", "hello", "vuploadmovie",
-		"login", "register", "newevent", "eventsshow", "filesshow", "fineuploader-s3-ui"}
+		"login", "register", "newevent", "eventsshow", "editoreventsshow", "filesshow", "fineuploader-s3-ui"}
 	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register",
-		"newevent", "eventsshow", "filesshow", "fineuploader-s3-ui"}
+		"newevent", "eventsshow", "editoreventsshow", "filesshow", "fineuploader-s3-ui"}
 	navItems := []navItem{{"about", "About"},
 		{"login", "Login"},
 		{"register", "Register"},
@@ -44,6 +44,7 @@ func Init() {
 		// {"uploadmovies", "UploadMovies"},
 		{"newevent", "NewEvent"},
 		{"events", "Events"},
+		{"editorevents", "EditorEvents"},
 		{"logout", "Logout"},
 		// {"fineuploader-s3-ui", "FineUploader"},
 		{"exitNow", "Exit"}}
@@ -149,12 +150,18 @@ func NewEvent(w http.ResponseWriter, fields ...string) {
 func EventsShow(w http.ResponseWriter, events interface{}) {
 	UseTemplate(w, "eventsshow", events)
 }
-func FielesShow(w http.ResponseWriter, event interface{}, files interface{}) {
+func FielesShow(w http.ResponseWriter, event interface{}, efs interface{}, dfs interface{}, role string) {
 	UseTemplate(w, "filesshow", struct {
-		Event interface{}
-		Files interface{}
-	}{Event: event, Files: files})
+		Event         interface{}
+		FilesOriginal interface{}
+		FilesEdited   interface{}
+		Role          string
+	}{Event: event, FilesOriginal: efs, FilesEdited: dfs, Role: role})
 }
+func EditorEventsShow(w http.ResponseWriter, editorEvents interface{}) {
+	UseTemplate(w, "editoreventsshow", editorEvents)
+}
+
 func FineUploadMovies(w http.ResponseWriter, event interface{}) {
 	vlog.Trace.Printf("show fineuploader-s3-ui, event=%v", event)
 	UseTemplate(w, "fineuploader-s3-ui", event)

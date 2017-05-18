@@ -1,0 +1,10 @@
+{{define "title"}}EDITOR EVENTS{{end}}
+{{define "head"}}{{end}}
+{{define "content"}}
+<div class="list-group">
+    {{range .}}
+    <a href="/files?eventID={{.EventID}}" class="list-group-item list-group-item-action">
+        {{.UserID}}, {{.UserNameFirst}}, {{.UserNameLast}}, {{.UserEmail}}, {{.EventID}}, {{.EventName}}, {{.EventStatus}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
+  {{end}}
+</div>
+{{end}}

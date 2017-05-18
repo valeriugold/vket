@@ -65,6 +65,7 @@ func (u *uploader) UploadFileCallbackAfter(r *http.Request, vr vmodelcallbacks.V
 	name := r.FormValue("name")
 	md5 := r.FormValue("etag")
 	eventID := r.FormValue("eventID")
+	editorID := r.FormValue("editorID")
 	vlog.Trace.Printf("converting ev=%v", eventID)
 	eid64, err := strconv.ParseUint(eventID, 10, 32)
 	if err != nil {
@@ -72,6 +73,17 @@ func (u *uploader) UploadFileCallbackAfter(r *http.Request, vr vmodelcallbacks.V
 		return
 	}
 	eid := uint32(eid64)
+	edID := uint32(0)
+	if len(editorID) > 0 {
+		vlog.Trace.Printf("converting editorID=%v", editorID)
+		edID64, err64 := strconv.ParseUint(editorID, 10, 32)
+		if err64 != nil {
+			err = err64
+			vlog.Warning.Printf("stringToUint32 s=%s, err=%v", editorID, err)
+			return
+		}
+		edID = uint32(edID64)
+	}
 	// isBrowserPreviewCapable=true&key=user%2Fvg%2F4-4-3f525c61-ea46-4ae1-9ca1-fdf80cfa0839--IMG_20160821_165653814_HDR.jpg&
 	// 	uuid=3f525c61-ea46-4ae1-9ca1-fdf80cfa0839&
 	// 	name=IMG_20160821_165653814_HDR.jpg&
@@ -79,7 +91,7 @@ func (u *uploader) UploadFileCallbackAfter(r *http.Request, vr vmodelcallbacks.V
 	// 	etag=%2201791e79c9ced416ad2b11c0979931ef%22
 
 	vlog.Trace.Printf("calling vr.RecordUploadedFile k=%s, evid=%s eid=%d, md5=%s\n", key, eventID, eid, md5[1:33])
-	if err = vr.RecordUploadedFile(eid, name, key, md5[1:33]); err != nil {
+	if err = vr.RecordUploadedFile(eid, edID, name, key, md5[1:33]); err != nil {
 		// vlog.Warning.Printf("err on SaveMultipart, err:%v", err)
 		// http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

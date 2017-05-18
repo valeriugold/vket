@@ -1,4 +1,4 @@
-/* *****************************************************************************
+* *****************************************************************************
 // Setup the preferences
 // ****************************************************************************/
 SET NAMES utf8 COLLATE 'utf8_unicode_ci';
@@ -81,6 +81,7 @@ CREATE TABLE stored_file (
 INSERT INTO stored_file (name, size, md5, ref_count) VALUES("dummy", 0, 0, 0xFFFFffff);
 
 /* drop table if exists user_file */
+/*
 CREATE TABLE user_file (
     id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
 
@@ -96,8 +97,9 @@ CREATE TABLE user_file (
     UNIQUE KEY (name, user_id),
     PRIMARY KEY (id)
 );
+*/
 
-/* drop table if exists user_file */
+/* drop table if exists event_file */
 CREATE TABLE event_file (
     id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
 
@@ -112,7 +114,70 @@ CREATE TABLE event_file (
 
     UNIQUE KEY (name, event_id),
     PRIMARY KEY (id)
+
+/*    owner_id INT(10) UNSIGNED NOT NULL,
+    status ENUM('original', 'processing', 'proposal', 'accepted') NOT NULL,
+    CONSTRAINT `f_event_file_owner` FOREIGN KEY (`owner_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    UNIQUE KEY (name, event_id, owner_id)
+*/
 );
+
+
+
+/* drop table if exists editor_event */
+CREATE TABLE editor_event (
+    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    editor_id INT(10) UNSIGNED NOT NULL,
+    event_id INT(10) UNSIGNED NOT NULL,
+    status ENUM('open', 'closed') NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT `f_editor_event_editor` FOREIGN KEY (`editor_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `f_editor_event_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+    UNIQUE KEY (editor_id, event_id),
+    PRIMARY KEY (id)
+);
+
+/* drop table if exists edited_file */
+CREATE TABLE edited_file (
+    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    event_id INT(10) UNSIGNED NOT NULL,
+    editor_id INT(10) UNSIGNED NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    status ENUM('processing', 'proposal', 'accepted') NOT NULL,
+    stored_file_id INT(10) UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT `f_edited_file_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `f_edited_file_editor` FOREIGN KEY (`editor_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `f_edited_file_stored_file` FOREIGN KEY (`stored_file_id`) REFERENCES `stored_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+    UNIQUE KEY (name, event_id, editor_id),
+    PRIMARY KEY (id)
+);
+
+/* drop table if exists preview_file */
+CREATE TABLE preview_file (
+    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    edited_file_id INT(10) UNSIGNED NOT NULL,
+    name VARCHAR(120) NOT NULL,
+    stored_file_id INT(10) UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT `f_preview_file_edited_file` FOREIGN KEY (`edited_file_id`) REFERENCES `edited_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `f_preview_file_stored_file` FOREIGN KEY (`stored_file_id`) REFERENCES `stored_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+    UNIQUE KEY (name, edited_file_id),
+    PRIMARY KEY (id)
+);
+
 
 /*
     size BIGINT(16) UNSIGNED NOT NULL,

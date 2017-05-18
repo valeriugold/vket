@@ -37,7 +37,7 @@ func TestEvent(t *testing.T) {
 	}
 	defer EventDelete(tur.ID, teName)
 	// retrive user
-	x, err := EventByUserIDName(tur.ID, teName)
+	x, err := EventGetByUserIDName(tur.ID, teName)
 	if err != nil {
 		t.Errorf("retriving events %d, err: %v\n", tur.ID, err)
 	}
@@ -121,7 +121,7 @@ func TestEventFile(t *testing.T) {
 	}
 	defer EventDelete(tur.ID, teName)
 	// retrive event
-	x, err := EventByUserIDName(tur.ID, teName)
+	x, err := EventGetByUserIDName(tur.ID, teName)
 	if err != nil {
 		t.Errorf("retriving events %d, err: %v\n", tur.ID, err)
 	}
