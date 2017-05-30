@@ -222,18 +222,12 @@ func FilesOpPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// check if user can acccess the files
+	// check if user can acccess the event, assuming the form contains "eventID"
 	ev, err := GetEventFromFormCheckAccess(r, vsess)
 	if err != nil {
 		vlog.Warning.Printf("Error: %v", err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	areEditedFiles := false
-	// form's filestype can be original or edited
-	if filesType := r.FormValue("filesType"); filesType == "edited" {
-		areEditedFiles = true
 	}
 
 	requestDump, err := httputil.DumpRequest(r, true)
@@ -257,47 +251,27 @@ func FilesOpPOST(w http.ResponseWriter, r *http.Request) {
 		if a, ok := r.PostForm["action"]; ok {
 			vlog.Info.Printf("action = %v", a)
 			if len(a) == 1 {
-				// get the slice on which the operation is allowed
-				if areEditedFiles {
-					efids = vmodel.GetEditedFidsAllowedOp(a[0], vsess.UserID, vsess.Role, efids)
-				} else {
-					efids = vmodel.GetOriginalFidsAllowedOp(a[0], vsess.UserID, vsess.Role, efids)
-				}
 				if a[0] == "delete" {
+					// get the slice on which the operation is allowed
+					defids := vmodel.GetEventFileIDsAllowedDelete(vsess.UserID, vsess.Role, efids)
 					vlog.Info.Printf("Delete files id %v", efids)
-					for _, efid := range efids {
-						if areEditedFiles {
-							vlog.Info.Printf("delete edited file ID =%d", efid)
-							if err = vr.DeleteDataByEditedFileID(efid); err != nil {
-								vlog.Warning.Printf("could not delete edited file ID =%d, err=%v", efid, err)
-								http.Error(w, err.Error(), http.StatusInternalServerError)
-								return
-							}
-						} else {
-							vlog.Info.Printf("delete event file ID =%d", efid)
-							if err = vr.DeleteDataByEventFileID(efid); err != nil {
-								vlog.Warning.Printf("could not delete event file ID =%d, err=%v", efid, err)
-								http.Error(w, err.Error(), http.StatusInternalServerError)
-								return
-							}
+
+					for _, efid := range defids {
+						vlog.Info.Printf("delete event file ID =%d", efid)
+						if err = vr.DeleteDataByEventFileID(efid); err != nil {
+							vlog.Warning.Printf("could not delete event file ID =%d, err=%v", efid, err)
+							http.Error(w, err.Error(), http.StatusInternalServerError)
+							return
 						}
 					}
 					// show the files page without the deleted files
-					efs, err := vmodel.EventFileGetAllForEventID(ev.ID)
-					if err != nil {
-						vlog.Warning.Printf("Could not get files for events id %d, err:%v", ev.ID, err)
-						vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
-						return
-					}
-
-					vlog.Info.Printf("FielesShow: ev=%v, efs=%v", ev, efs)
-					// http.Redirect(w, r, "/files?eventID=15", 303)
 					RunDisplayFiles(w, ev, vsess)
-					// vviews.FielesShow(w, ev, efs, true)
 				} else if a[0] == "download" {
-					vlog.Info.Printf("Download files id %v", files)
+					// get the slice on which the operation is allowed
+					wefids := vmodel.GetEventFileIDsAllowedDownload(vsess.UserID, vsess.Role, efids)
+					vlog.Info.Printf("Download files id %v", wefids)
 					zpr := vs.GetZipper()
-					if err = vr.DownloadFiles(w, r, ev.ID, areEditedFiles, efids, zpr); err != nil {
+					if err = vr.DownloadFiles(w, r, ev.ID, wefids, zpr); err != nil {
 						vlog.Warning.Printf("could not download, err=%v", err)
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
@@ -337,6 +311,7 @@ func FineUploadForEventGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	userID := ev.UserID
+	// VG: todo: revisit editor selection, maybe use onwerID?
 	editorID := uint32(0)
 	if vsess != nil && vsess.Role == "editor" {
 		userID = vsess.UserID
@@ -499,7 +474,7 @@ func FilesGET(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		return
 	}
-	// check if user can acccess the files
+	// check if user can acccess the event, assuming the form contains "eventID"
 	ev, err := GetEventFromFormCheckAccess(r, vsess)
 	if err != nil {
 		vlog.Warning.Printf("Error: %v", err)
@@ -510,27 +485,25 @@ func FilesGET(w http.ResponseWriter, r *http.Request) {
 }
 
 func RunDisplayFiles(w http.ResponseWriter, ev vmodel.Event, vsess *VSession) {
-	// get original files
-	efs, err := vmodel.EventFileGetAllForEventID(ev.ID)
-	if err != nil {
-		vlog.Warning.Printf("Could not get files for events id %d, err:%v", ev.ID, err)
-		vviews.Error(w, "Could not get events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
-		return
-	}
-	// get edited files
-	var dfs []vmodel.EditedFile
-	if vsess.Role == "editor" {
-		dfs, err = vmodel.EditedFileGetAllForEventIDEditorID(ev.ID, vsess.UserID)
-	} else {
-		dfs, err = vmodel.EditedFileGetAllForEventID(ev.ID)
-	}
+	// get files
+	efs, err := vmodel.EventFileGetForUserIDEventID(vsess.UserID, ev.ID, vsess.Role)
 	if err != nil {
 		vlog.Warning.Printf("Could not get edited files for events id %d, editor %d err:%v", ev.ID, vsess.UserID, err)
 		vviews.Error(w, "Could not get edited events for user id "+fmt.Sprintf("%d", ev.ID)+" error="+err.Error())
 		return
 	}
-	vlog.Info.Printf("FielesShow: ev=%v, efs=%v, dfs=%v", ev, efs, dfs)
-	vviews.FielesShow(w, ev, efs, dfs, vsess.Role)
+	// split into original files and processed ones
+	var ofs []vmodel.EventFile
+	var dfs []vmodel.EventFile
+	for _, f := range efs {
+		if f.Status == "original" {
+			ofs = append(ofs, f)
+		} else {
+			dfs = append(dfs, f)
+		}
+	}
+	vlog.Info.Printf("FielesShow: ev=%v, ofs=%v, dfs=%v", ev, ofs, dfs)
+	vviews.FielesShow(w, ev, ofs, dfs, vsess.Role)
 }
 
 func EventsGET(w http.ResponseWriter, r *http.Request) {

@@ -24,6 +24,7 @@ type VCloud interface {
 	SignPolicy(policy []byte) (base64Policy, s3Signature string, err error)
 	GetZipper() vzipfiles.Zipper
 	DeleteFile(key string) error
+	GeneratePreviewCopy(key string) (newKey, newMd5 string, err error)
 	// DeleteFile(key interface{}) error
 	// // DeleteFileByEventIDName(eventID uint32, name string) error
 	// // DeleteFileByEventFileID(eventFileID uint32) error

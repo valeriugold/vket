@@ -24,7 +24,7 @@
     <input type="hidden" name="filesType" value="edited"> 
 <div class="list-group">
     {{range .FilesEdited}}
-    <a href="#" class="list-group-item"><input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right"> {{.EditorID}}, {{.ID}}, {{.Name}}, {{.EventID}}, {{.StoredFileID}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
+    <a href="#" class="list-group-item"><input title="toggle all" type="checkbox" name="file" value="{{.ID}}" class="all pull-right"> {{.OwnerID}}, {{.ID}}, {{.Name}}, {{.EventID}}, {{.StoredFileID}}, {{.CreatedAt}}, {{.UpdatedAt}}</a>
     {{end}}
 </div>
 <div class="form-group">

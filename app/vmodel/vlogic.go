@@ -46,24 +46,70 @@ func (v *vLogic) RecordUploadedFile(eventID, editorID uint32, fileName, s3Key, m
 	// 	vsl.Remove(fileId)
 	// }
 
+	ev, err := EventGetByEventID(eventID)
+	if err != nil {
+		// VG: todo: delete uploaded file? - or move this check before the upload....
+		StoredFileDeleteByID(sf.ID)
+		return err
+	}
+
 	if editorID == 0 {
 		// this is an original file, add it to event_file
-		if err = EventFileCreate(eventID, fileName, sf.ID); err != nil {
+		if err = EventFileCreate(eventID, ev.UserID, "original", fileName, sf.ID); err != nil {
 			StoredFileDeleteByID(sf.ID)
 			return err
 		}
 	} else {
-		// this is an edited file, add it to edited_file
-		if err = EditedFileCreate(eventID, editorID, fileName, sf.ID); err != nil {
+		_, err := UserGetByID(editorID)
+		if err != nil {
+			// VG: todo: delete uploaded file? - or move this check before the upload....
 			StoredFileDeleteByID(sf.ID)
 			return err
 		}
+		// check there is a connection between editor and user
+		// VG: todo: check connection between editor and user
+		// this is an edited file
+		if err = EventFileCreate(eventID, editorID, "proposal", fileName, sf.ID); err != nil {
+			StoredFileDeleteByID(sf.ID)
+			return err
+		}
+		go v.createPreview(eventID, editorID, fileName)
 	}
 	return nil
 }
 
-func (v *vLogic) RecordDeleteFile(eventID uint32, name string) error {
-	ef, err := EventFileGetByEventIDName(eventID, name)
+func (v *vLogic) createPreview(eventID, ownerID uint32, name string) {
+	ev, err := EventFileGetByEventIDOwnerIDName(eventID, ownerID, name)
+	if err != nil {
+		vlog.Warning.Printf("Err on createPreview, EventFileGetByEventIDOwnerIDName(%d, %d, %s): %v", eventID, ownerID, name, err)
+		return
+	}
+	sf, err := StoredFileGetByID(ev.StoredFileID)
+	if err != nil {
+		vlog.Warning.Printf("Err on createPreview, StoredFileGetByID(%d): %v", ev.StoredFileID, err)
+		return
+	}
+	// actually generate the preview file
+	pk, md5, err := v.vc.GeneratePreviewCopy(sf.Name)
+	if err != nil {
+		vlog.Warning.Printf("Err on createPreview, GeneratePreviewCopy(%s): %v", sf.Name, err)
+		return
+	}
+	// register the newly created file
+	psf, err := StoredFileCreate(pk, 0, md5)
+	if err != nil {
+		vlog.Warning.Printf("Err on createPreview, StoredFileCreate(%s): %v", pk, err)
+		return
+	}
+	if err = EventFileCreate(eventID, ownerID, "preview", name+".preview", psf.ID); err != nil {
+		vlog.Warning.Printf("Err on createPreview, EventFileCreate(%d, %d): %v", eventID, ownerID, err)
+		StoredFileDeleteByID(psf.ID)
+		return
+	}
+}
+
+func (v *vLogic) RecordDeleteFile(eventID, ownerID uint32, name string) error {
+	ef, err := EventFileGetByEventIDOwnerIDName(eventID, ownerID, name)
 	if err != nil {
 		return err
 	}
@@ -104,41 +150,7 @@ func (v *vLogic) deleteDataByEventFile(ef EventFile) error {
 	return err
 }
 
-func (v *vLogic) DeleteDataByEditedFileID(editedFileID uint32) error {
-	vlog.Trace.Printf("deleting file editedFileId=%d", editedFileID)
-	df, err := EditedFileGetByEditedFileID(editedFileID)
-	if err != nil {
-		return err
-	}
-	// vlog.Trace.Printf("delete evFile=%v", ef)
-	return v.deleteDataByEditedFile(df)
-}
-
-func (v *vLogic) deleteDataByEditedFile(df EditedFile) error {
-	sf, err := StoredFileGetByID(df.StoredFileID)
-	if err != nil {
-		return err
-	}
-	if err = EditedFileDeleteByID(df.ID); err != nil {
-		return err
-	}
-	if err = StoredFileDeleteByID(df.StoredFileID); err != nil {
-		return err
-	}
-	if sf.RefCount <= 1 {
-		vlog.Info.Printf("deleting file name: %s", sf.Name)
-		err = v.vc.DeleteFile(sf.Name)
-		// or
-		// nobody else has a reference to this file
-		// VG: todo ---> see what happens here
-		// if err = S3Remove(ef.StoredFileID); err != nil {
-		// 	return err
-		// }
-	}
-	return err
-}
-
-func (v *vLogic) DownloadFiles(w http.ResponseWriter, r *http.Request, eventID uint32, areEditedFiles bool, fileEventIDs []uint32, zpr vzipfiles.Zipper) error {
+func (v *vLogic) DownloadFiles(w http.ResponseWriter, r *http.Request, eventID uint32, fileEventIDs []uint32, zpr vzipfiles.Zipper) error {
 	// check if the event belongs to this authenticated user
 	ev, err := EventGetByEventID(eventID)
 	if err != nil {
@@ -156,27 +168,14 @@ func (v *vLogic) DownloadFiles(w http.ResponseWriter, r *http.Request, eventID u
 		// }
 		var sfID uint32
 		var name string
-		if areEditedFiles {
-			// these are edited files
-			df, err := EditedFileGetByEditedFileID(fid)
-			if err != nil {
-				vlog.Warning.Printf("df for id=%d err: %v", fid, err)
-				continue
-			}
-			sfID = df.StoredFileID
-			name = df.Name
-			vlog.Info.Printf("df===%v", df)
-		} else {
-			// these are original files
-			ef, err := EventFileGetByEventFileID(fid)
-			if err != nil {
-				vlog.Warning.Printf("ef for id=%d err: %v", fid, err)
-				continue
-			}
-			sfID = ef.StoredFileID
-			name = ef.Name
-			vlog.Info.Printf("ef===%v", ef)
+		ef, err := EventFileGetByEventFileID(fid)
+		if err != nil {
+			vlog.Warning.Printf("ef for id=%d err: %v", fid, err)
+			continue
 		}
+		sfID = ef.StoredFileID
+		name = ef.Name
+		vlog.Info.Printf("ef===%v", ef)
 		sf, err := StoredFileGetByID(sfID)
 		if err != nil {
 			vlog.Warning.Printf("sf for id=%d (eventID=%d) err: %v", sfID, fid, err)

@@ -15,6 +15,8 @@ type EventFile struct {
 	// ObjectID     bson.ObjectId `bson:"_id"`
 	ID           uint32    `db:"id" bson:"id,omitempty"` // Don't use ID, use StoredFileID() instead for consistency with MongoDB
 	EventID      uint32    `db:"event_id" bson:"event_id"`
+	OwnerID      uint32    `db:"owner_id" bson:"owner_id"`
+	Status       string    `db:"status" bson:"status"`
 	Name         string    `db:"name" bson:"name"` // The name of the file, as user sees it
 	StoredFileID uint32    `db:"stored_file_id" bson:"stored_file_id"`
 	CreatedAt    time.Time `db:"created_at" bson:"created_at"`
@@ -39,14 +41,15 @@ func EventFileGetByEventFileID(ID uint32) (EventFile, error) {
 	return result, standardizeError(err)
 }
 
-func EventFileGetByEventIDName(eventID uint32, name string) (EventFile, error) {
+func EventFileGetByEventIDOwnerIDName(eventID, ownerID uint32, name string) (EventFile, error) {
 	var err error
 
 	result := EventFile{}
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		err = database.SQL.Get(&result, "SELECT * FROM event_file WHERE event_id = ? and name = ? LIMIT 1", eventID, name)
+		err = database.SQL.Get(&result, "SELECT * FROM event_file WHERE event_id = ? and owner_id = ? and name = ? LIMIT 1",
+			eventID, ownerID, name)
 	default:
 		err = ErrCode
 	}
@@ -54,8 +57,8 @@ func EventFileGetByEventIDName(eventID uint32, name string) (EventFile, error) {
 	return result, standardizeError(err)
 }
 
-// EventFileGetAllForEventID gets all files for an event_id
-func EventFileGetAllForEventID(eventID uint32) ([]EventFile, error) {
+// EventFileGetAllForEventIDOwnerID gets all files for an event_id
+func EventFileGetAllForEventIDOwnerID(eventID, ownerID uint32) ([]EventFile, error) {
 	var err error
 
 	var result []EventFile
@@ -64,7 +67,7 @@ func EventFileGetAllForEventID(eventID uint32) ([]EventFile, error) {
 	case database.TypeMySQL:
 		err = database.SQL.Select(&result,
 			"SELECT id,event_id, name, stored_file_id, created_at, updated_at FROM event_file "+
-				"WHERE event_id = ?", eventID)
+				"WHERE event_id = ? and owner_id = ?", eventID, ownerID)
 	default:
 		err = ErrCode
 	}
@@ -72,13 +75,13 @@ func EventFileGetAllForEventID(eventID uint32) ([]EventFile, error) {
 	return result, standardizeError(err)
 }
 
-func EventFileCreate(eventID uint32, name string, storedFileID uint32) error {
+func EventFileCreate(eventID, ownerID uint32, status, name string, storedFileID uint32) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("INSERT INTO event_file (event_id, name, stored_file_id) VALUES (?,?,?)",
-			eventID, name, storedFileID)
+		_, err = database.SQL.Exec("INSERT INTO event_file (event_id, owner_id, status, name, stored_file_id) VALUES (?,?,?,?,?)",
+			eventID, ownerID, status, name, storedFileID)
 	default:
 		err = ErrCode
 	}
@@ -86,13 +89,13 @@ func EventFileCreate(eventID uint32, name string, storedFileID uint32) error {
 	return standardizeError(err)
 }
 
-func EventFileSetStoredFileID(eventID uint32, name string, storedFileID uint32) error {
+func EventFileSetStoredFileID(eventID, ownerID, uint32, name string, storedFileID uint32) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("UPDATE event_file SET stored_file_id = ? WHERE event_id = ? and name = ?",
-			storedFileID, eventID, name)
+		_, err = database.SQL.Exec("UPDATE event_file SET stored_file_id = ? WHERE event_id = ? and owner_id = > and name = ?",
+			storedFileID, eventID, ownerID, name)
 	default:
 		err = ErrCode
 	}
@@ -100,12 +103,12 @@ func EventFileSetStoredFileID(eventID uint32, name string, storedFileID uint32) 
 	return standardizeError(err)
 }
 
-func EventFileDelete(eventID uint32, name string) error {
+func EventFileDelete(eventID, ownerID uint32, name string) error {
 	var err error
 
 	switch database.ReadConfig().Type {
 	case database.TypeMySQL:
-		_, err = database.SQL.Exec("DELETE FROM event_file WHERE event_id = ? and name = ? LIMIT 1", eventID, name)
+		_, err = database.SQL.Exec("DELETE FROM event_file WHERE event_id = ? and owner_id = ? and name = ? LIMIT 1", eventID, ownerID, name)
 	default:
 		err = ErrCode
 	}

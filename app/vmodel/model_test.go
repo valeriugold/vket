@@ -127,14 +127,14 @@ func TestEventFile(t *testing.T) {
 	}
 
 	// add user file
-	tuf := EventFile{EventID: x.ID, Name: "testUFname", StoredFileID: 1}
-	if err = EventFileCreate(tuf.EventID, tuf.Name, tuf.StoredFileID); err != nil {
+	tuf := EventFile{EventID: x.ID, OwnerID: tur.ID, Name: "testUFname", StoredFileID: 1}
+	if err = EventFileCreate(tuf.EventID, tur.ID, "original", tuf.Name, tuf.StoredFileID); err != nil {
 		t.Errorf("err creating event_file %v, err: %v", tuf, err)
 	}
-	defer EventFileDelete(tuf.EventID, tuf.Name)
+	defer EventFileDelete(tuf.EventID, tur.ID, tuf.Name)
 
 	// retrieve user file
-	uf, err := EventFileGetByEventIDName(tuf.EventID, tuf.Name)
+	uf, err := EventFileGetByEventIDOwnerIDName(tuf.EventID, tur.ID, tuf.Name)
 	if err != nil {
 		t.Errorf("err getting event_file (%d, %s), err: %v", tuf.EventID, tuf.Name, err)
 	}
@@ -145,72 +145,22 @@ func TestEventFile(t *testing.T) {
 	}
 
 	// try to add same user_file again
-	if err = UserFileCreate(tuf.EventID, tuf.Name, tuf.StoredFileID); err == nil {
+	if err = EventFileCreate(tuf.EventID, tur.ID, "original", tuf.Name, tuf.StoredFileID); err == nil {
 		t.Errorf("no err creating duplicate event_file %v", tuf)
 	}
 	t.Logf("expected error creating duplicate event_file, err: %v", err)
 
 	// delete event_file
-	if err = EventFileDelete(tuf.EventID, tuf.Name); err != nil {
+	if err = EventFileDelete(tuf.EventID, tur.ID, tuf.Name); err != nil {
 		t.Errorf("deleting event_file (%d, %s), err: %v\n", tuf.EventID, tuf.Name, err)
 	}
 
 	// try retrieve deleted event file
-	_, err = EventFileGetByEventIDName(tuf.EventID, tuf.Name)
+	_, err = EventFileGetByEventIDOwnerIDName(tuf.EventID, tur.ID, tuf.Name)
 	if err == nil {
 		t.Errorf("no error on getting deleted event_file")
 	}
 	t.Logf("expected error retriving deleted event_file err: %v\n", err)
-}
-
-func TestUserFile(t *testing.T) {
-	// Connect to database
-	database.Connect(configDb)
-
-	// add user
-	tu := User{FirstName: "testFirst", LastName: "testLast", Email: "test@test", Password: "testPass", Role: "user"}
-	err := UserCreate(tu.FirstName, tu.LastName, tu.Email, tu.Password, tu.Role)
-	// retrive user
-	x, err := UserByEmail(tu.Email)
-	if err != nil {
-		t.Errorf("retriving user %s, err: %v\n", tu.Email, err)
-	}
-
-	// add user file
-	tuf := UserFile{UserID: x.ID, Name: "testUFname", StoredFileID: 1}
-	if err = UserFileCreate(tuf.UserID, tuf.Name, tuf.StoredFileID); err != nil {
-		t.Errorf("err creating user_file %v, err: %v", tuf, err)
-	}
-
-	// retrieve user file
-	uf, err := UserFileGetByUserIDName(tuf.UserID, tuf.Name)
-	if err != nil {
-		t.Errorf("err getting user_file (%d, %s), err: %v", tuf.UserID, tuf.Name, err)
-	}
-
-	// check tuf == uf
-	if tuf.UserID != uf.UserID ||
-		tuf.Name != uf.Name ||
-		tuf.StoredFileID != uf.StoredFileID {
-		t.Errorf("what was gotten %v is not what was set %v", uf, tuf)
-	}
-	//t.Logf("got back %v", uf)
-
-	// try to add same user_file again
-	if err = UserFileCreate(tuf.UserID, tuf.Name, tuf.StoredFileID); err == nil {
-		t.Errorf("no err creating duplicate user_file %v", tuf)
-	}
-	t.Logf("expected error creating duplicate user_file, err: %v", err)
-
-	// delete user_file
-	if err = UserFileDelete(tuf.UserID, tuf.Name); err != nil {
-		t.Errorf("deleting user_file (%d, %s), err: %v\n", tuf.UserID, tuf.Name, err)
-	}
-
-	// delete user
-	if err = UserDelete(tu.Email); err != nil {
-		t.Errorf("deleting user %s, err: %v\n", tu.Email, err)
-	}
 }
 
 func TestStoredFile(t *testing.T) {

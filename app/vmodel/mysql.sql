@@ -104,6 +104,9 @@ CREATE TABLE event_file (
     id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
 
     event_id INT(10) UNSIGNED NOT NULL,
+    owner_id INT(10) UNSIGNED NOT NULL,
+    /* status ENUM('original', 'processing', 'proposal', 'accepted') NOT NULL, */
+    status ENUM('original', 'preview', 'proposal', 'accepted') NOT NULL,
     name VARCHAR(120) NOT NULL,
     stored_file_id INT(10) UNSIGNED NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -111,18 +114,20 @@ CREATE TABLE event_file (
 
     CONSTRAINT `f_event_file_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT `f_event_file_stored_file` FOREIGN KEY (`stored_file_id`) REFERENCES `stored_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-
-    UNIQUE KEY (name, event_id),
-    PRIMARY KEY (id)
-
-/*    owner_id INT(10) UNSIGNED NOT NULL,
-    status ENUM('original', 'processing', 'proposal', 'accepted') NOT NULL,
     CONSTRAINT `f_event_file_owner` FOREIGN KEY (`owner_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    UNIQUE KEY (name, event_id, owner_id)
-*/
+
+    UNIQUE KEY (name, event_id, owner_id),
+    PRIMARY KEY (id)
 );
 
-
+/* get files for user, event */
+select a.id id, a.event_id event_id, a.owner_id owner_id, a.status status, a.name name, a.created_at created_at, a.updated_at updated_at from
+event_file a
+inner join event b on a.event_id=b.id
+inner join user c on b.user_id=c.id
+left join editor_event d on a.event_id=d.event_id
+where 4=b.user_id or 4=d.editor_id;
+where OWNER=b.user_id or OWNER=d.editor_id;
 
 /* drop table if exists editor_event */
 CREATE TABLE editor_event (
@@ -138,26 +143,6 @@ CREATE TABLE editor_event (
     CONSTRAINT `f_editor_event_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
 
     UNIQUE KEY (editor_id, event_id),
-    PRIMARY KEY (id)
-);
-
-/* drop table if exists edited_file */
-CREATE TABLE edited_file (
-    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
-
-    event_id INT(10) UNSIGNED NOT NULL,
-    editor_id INT(10) UNSIGNED NOT NULL,
-    name VARCHAR(120) NOT NULL,
-    status ENUM('processing', 'proposal', 'accepted') NOT NULL,
-    stored_file_id INT(10) UNSIGNED NOT NULL,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    CONSTRAINT `f_edited_file_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT `f_edited_file_editor` FOREIGN KEY (`editor_id`) REFERENCES `user` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-    CONSTRAINT `f_edited_file_stored_file` FOREIGN KEY (`stored_file_id`) REFERENCES `stored_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
-
-    UNIQUE KEY (name, event_id, editor_id),
     PRIMARY KEY (id)
 );
 

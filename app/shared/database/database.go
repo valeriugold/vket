@@ -1,14 +1,18 @@
 package database
 
 import (
+	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/boltdb/bolt"
 	_ "github.com/go-sql-driver/mysql" // MySQL driver
 	"github.com/jmoiron/sqlx"
+	"github.com/valeriugold/vket/app/shared/vlog"
 	"gopkg.in/mgo.v2"
 )
 
@@ -18,10 +22,104 @@ var (
 	// Mongo wrapper
 	Mongo *mgo.Session
 	// SQL wrapper
-	SQL *sqlx.DB
+	// SQL *sqlx.DB
+	SQL WrapperSql
 	// Database info
 	databases Info
 )
+
+// WrapperSql is a Decorator struct for the actual sqlx.DB
+type WrapperSql struct {
+	theSqlx *sqlx.DB
+}
+
+// Select logs ins and outs and calls sqlx.DB.Select
+func (ws WrapperSql) Select(dest interface{}, query string, args ...interface{}) error {
+	vlog.Info.Printf("__sql-query::: %s\n", sqlQueryDebugString(query, args...))
+	err := ws.theSqlx.Select(dest, query, args...)
+	if err == nil {
+		vlog.Info.Printf("__sql-result=== %v\n", dest)
+	} else {
+		vlog.Info.Printf("__sql-error--- %v\n", err)
+	}
+	return err
+}
+
+// Get logs ins and outs and calls sqlx.DB.Get
+func (ws WrapperSql) Get(dest interface{}, query string, args ...interface{}) error {
+	vlog.Info.Printf("__sql-query::: %s\n", sqlQueryDebugString(query, args...))
+	// vlog.Info.Printf("__sql-query::: %v --- %v\n", query, args)
+	err := ws.theSqlx.Get(dest, query, args...)
+	if err == nil {
+		vlog.Info.Printf("__sql-result=== %v\n", dest)
+	} else {
+		vlog.Info.Printf("__sql-error--- %v\n", err)
+	}
+	return err
+}
+
+// Exec logs ins and outs and calls sqlx.DB.Exec
+func (ws WrapperSql) Exec(query string, args ...interface{}) (sql.Result, error) {
+	vlog.Info.Printf("__sql-query::: %s\n", sqlQueryDebugString(query, args...))
+	r, err := ws.theSqlx.Exec(query, args...)
+	if err != nil {
+		vlog.Info.Printf("__sql-error--- %v\n", err)
+	}
+	return r, err
+}
+
+// SQLQueryDebugString formats an sql query inlining its arguments
+// The purpose is debug only - do not send this to the database!
+// Sending this to the DB is unsafe and un-performant.
+func sqlQueryDebugString(query string, args ...interface{}) string {
+	var buffer bytes.Buffer
+	nArgs := len(args)
+	// Break the string by question marks, iterate over its parts and for each
+	// question mark - append an argument and format the argument according to
+	// it's type, taking into consideration NULL values and quoting strings.
+	for i, part := range strings.Split(query, "?") {
+		buffer.WriteString(part)
+		if i < nArgs {
+			switch a := args[i].(type) {
+			case int64:
+				buffer.WriteString(fmt.Sprintf("%d", a))
+			case uint32:
+				buffer.WriteString(fmt.Sprintf("%d", a))
+			case uint64:
+				buffer.WriteString(fmt.Sprintf("%d", a))
+			case bool:
+				buffer.WriteString(fmt.Sprintf("%t", a))
+			case sql.NullBool:
+				if a.Valid {
+					buffer.WriteString(fmt.Sprintf("%t", a.Bool))
+				} else {
+					buffer.WriteString("NULL")
+				}
+			case sql.NullInt64:
+				if a.Valid {
+					buffer.WriteString(fmt.Sprintf("%d", a.Int64))
+				} else {
+					buffer.WriteString("NULL")
+				}
+			case sql.NullString:
+				if a.Valid {
+					buffer.WriteString(fmt.Sprintf("%q", a.String))
+				} else {
+					buffer.WriteString("NULL")
+				}
+			case sql.NullFloat64:
+				if a.Valid {
+					buffer.WriteString(fmt.Sprintf("%f", a.Float64))
+				} else {
+					buffer.WriteString("NULL")
+				}
+			default:
+				buffer.WriteString(fmt.Sprintf("%q", a))
+			}
+		}
+	}
+	return buffer.String()
+}
 
 // Type is the type of database from a Type* constant
 type Type string
@@ -92,12 +190,12 @@ func Connect(d Info) {
 	switch d.Type {
 	case TypeMySQL:
 		// Connect to MySQL
-		if SQL, err = sqlx.Connect("mysql", DSN(d.MySQL)); err != nil {
+		if SQL.theSqlx, err = sqlx.Connect("mysql", DSN(d.MySQL)); err != nil {
 			log.Println("SQL Driver Error", err)
 		}
 
 		// Check if is alive
-		if err = SQL.Ping(); err != nil {
+		if err = SQL.theSqlx.Ping(); err != nil {
 			log.Println("Database Error", err)
 		}
 	case TypeBolt:
