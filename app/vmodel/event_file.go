@@ -1,6 +1,8 @@
 package vmodel
 
 import (
+	"errors"
+	"strings"
 	"time"
 
 	"github.com/valeriugold/vket/app/shared/database"
@@ -127,4 +129,117 @@ func EventFileDeleteByID(ID uint32) error {
 	}
 
 	return standardizeError(err)
+}
+
+func EventFileCreatePreview(eventID, ownerID uint32, name string, storedFileID uint32) error {
+	// if status != "proposal" {
+	// 	return errors.New("The file status is not proposal")
+	// }
+	name = name + ".preview"
+	return EventFileCreate(eventID, ownerID, "preview", name, storedFileID)
+}
+
+func EventFileDeletePreview(ef EventFile) error {
+	pef, err := EventFileGetPreview(ef)
+	if err == nil {
+		err = EventFileDeleteByID(pef.ID)
+	}
+	return err
+}
+
+func EventFileGetPreview(ef EventFile) (EventFile, error) {
+	if ef.Status != "proposal" {
+		return EventFile{}, errors.New("The file status is not proposal")
+	}
+	name := ef.Name + ".preview"
+	return EventFileGetByEventIDOwnerIDName(ef.EventID, ef.OwnerID, name)
+}
+
+func EventFileGetProposal(preview EventFile) (EventFile, error) {
+	if preview.Status != "preview" {
+		return EventFile{}, errors.New("The file status is not preview")
+	}
+	if !strings.HasSuffix(preview.Name, ".preview") {
+		return EventFile{}, errors.New("The file name does not end with .preview")
+	}
+	name := strings.TrimSuffix(preview.Name, ".preview")
+	return EventFileGetByEventIDOwnerIDName(preview.EventID, preview.OwnerID, name)
+}
+
+// func EventFileAccept(af, pf EventFile, ev Event, ownerID uint32) error {
+func EventFileAcceptProposalID(efid uint32) error {
+	aef, err := EventFileGetByEventFileID(efid)
+	if err != nil {
+		return err
+	}
+	ev, err := EventGetByEventID(aef.EventID)
+	if err != nil {
+		return err
+	}
+	// tranfer ownership
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		_, err = database.SQL.Exec("UPDATE event_file SET owner_id = ?, status = 'accepted' WHERE ID = ?",
+			ev.UserID, aef.ID)
+	default:
+		err = ErrCode
+	}
+
+	if err != nil {
+		return standardizeError(err)
+	}
+
+	// delete preview file
+	return EventFileDeletePreview(aef)
+}
+
+func EventFileAcceptPreviewID(efid uint32) error {
+	pref, err := EventFileGetByEventFileID(efid)
+	if err != nil {
+		return err
+	}
+	aef, err := EventFileGetProposal(pref)
+	if err != nil {
+		return err
+	}
+	ev, err := EventGetByEventID(aef.EventID)
+	if err != nil {
+		return err
+	}
+	// tranfer ownership
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		_, err = database.SQL.Exec("UPDATE event_file SET owner_id = ?, status = 'accepted' WHERE ID = ?",
+			ev.UserID, aef.ID)
+	default:
+		err = ErrCode
+	}
+	if err != nil {
+		return standardizeError(err)
+	}
+	// delete preview file
+	return EventFileDeleteByID(pref.ID)
+}
+
+func EventFileRejectPreviewID(efid uint32) error {
+	pref, err := EventFileGetByEventFileID(efid)
+	if err != nil {
+		return err
+	}
+	aef, err := EventFileGetProposal(pref)
+	if err != nil {
+		return err
+	}
+	// change status to 'rejected'
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		_, err = database.SQL.Exec("UPDATE event_file SET status = 'rejected' WHERE ID = ?", aef.ID)
+	default:
+		err = ErrCode
+	}
+	if err != nil {
+		return standardizeError(err)
+	}
+	// delete preview file
+	return EventFileDeleteByID(pref.ID)
 }

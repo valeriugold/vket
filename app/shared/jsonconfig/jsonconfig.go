@@ -29,7 +29,7 @@ func Load(configFile string, p Parser) {
 		log.Fatalln(err)
 	}
 
-	fmt.Printf("before filtering out comments: %v\n", jsonBytes)
+	fmt.Printf("before filtering out comments: %v\n", string(jsonBytes))
 
 	var reComments = regexp.MustCompile(`(?m)^\s*//.*$\n?`)
 	b := reComments.ReplaceAll(jsonBytes, []byte{})

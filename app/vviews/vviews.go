@@ -3,6 +3,7 @@ package vviews
 import (
 	"encoding/json"
 	"html/template"
+	"log"
 	"net/http"
 	"path/filepath"
 
@@ -27,14 +28,41 @@ type nav struct {
 
 // global var holding all templates
 // var t *template.Template
-var views = make(map[string]*View)
-var nameOfBaseTmpl = "base"
-var dir = "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/app/vviews/vtemplates"
+var (
+	config Configuration = Configuration{
+		Debug:          0,
+		Dir:            "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/app/vviews/vtemplates",
+		NameOfBaseTmpl: "base",
+	}
+	views = make(map[string]*View)
+)
+
+type Configuration struct {
+	Debug          int    `json:"Debug"`
+	Dir            string `json:"Dir"`
+	NameOfBaseTmpl string `json:"BaseTmpl"`
+}
+
+// InitConfiguration copy configuration to local config variable and init the system
+func InitConfiguration(c Configuration) {
+	config = c
+	Init()
+	log.Printf("log: %v\n", config)
+}
 
 // Init should be called automatically when this package is used
 func Init() {
-	names := []string{"about", "error", "hello", "vuploadmovie",
-		"login", "register", "newevent", "eventsshow", "editoreventsshow", "filesshow", "fineuploader-s3-ui"}
+	names := []string{"about",
+		"error",
+		"hello",
+		"vuploadmovie",
+		"login",
+		"register",
+		"newevent",
+		"eventsshow",
+		"editoreventsshow",
+		"filesshow",
+		"fineuploader-s3-ui"}
 	navActives := []string{"about", "error", "hello", "uploadmovie", "login", "register",
 		"newevent", "eventsshow", "editoreventsshow", "filesshow", "fineuploader-s3-ui"}
 	navItems := []navItem{{"about", "About"},
@@ -49,7 +77,7 @@ func Init() {
 		// {"fineuploader-s3-ui", "FineUploader"},
 		{"exitNow", "Exit"}}
 	for i, n := range names {
-		views[n] = CreateView(n, nameOfBaseTmpl, []string{n}, navActives[i], navItems)
+		views[n] = CreateView(n, config.NameOfBaseTmpl, []string{n}, navActives[i], navItems)
 	}
 }
 
@@ -83,6 +111,21 @@ func CreateView(name string, baseName string, files []string, navActive string, 
 }
 func UseTemplate(w http.ResponseWriter, name string, data interface{}) {
 	if v, ok := views[name]; ok {
+		if config.Debug > 0 {
+			if config.Debug >= 1 {
+				b, err := json.MarshalIndent(data, "", "    ")
+				if err != nil {
+					vlog.Error.Printf("err marshal data for %s: %v", v.name, err)
+					return
+				}
+				vlog.Trace.Printf("UseTemplate:\n>>> name=%s\n%v\n<<<\n", v.name, string(b))
+				if config.Debug >= 2 {
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					w.Write(b)
+					return
+				}
+			}
+		}
 		d := struct {
 			Nav  nav
 			Data interface{}
@@ -96,8 +139,8 @@ func UseTemplate(w http.ResponseWriter, name string, data interface{}) {
 func (v *View) Init() {
 	paths := make([]string, 0, len(v.files))
 	for _, f := range v.files {
-		vlog.Trace.Printf("d=%s, f=%v\n", dir, f)
-		paths = append(paths, filepath.Join(dir, f))
+		vlog.Trace.Printf("d=%s, f=%v\n", config.Dir, f)
+		paths = append(paths, filepath.Join(config.Dir, f))
 	}
 	vlog.Trace.Println("l=", len(paths), " paths = ", paths)
 	vlog.Trace.Printf("0=%s!\n", paths[0])

@@ -101,7 +101,7 @@ func (v *vLogic) createPreview(eventID, ownerID uint32, name string) {
 		vlog.Warning.Printf("Err on createPreview, StoredFileCreate(%s): %v", pk, err)
 		return
 	}
-	if err = EventFileCreate(eventID, ownerID, "preview", name+".preview", psf.ID); err != nil {
+	if err = EventFileCreatePreview(eventID, ownerID, name, psf.ID); err != nil {
 		vlog.Warning.Printf("Err on createPreview, EventFileCreate(%d, %d): %v", eventID, ownerID, err)
 		StoredFileDeleteByID(psf.ID)
 		return

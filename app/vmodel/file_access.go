@@ -60,8 +60,9 @@ func GetEventFileIDsAllowedDownload(reqUserID uint32, reqRole string, efids []ui
 			// for user check if it owns the event
 			if reqRole == "user" {
 				if reqUserID == ev.UserID {
-					rids = append(rids, efid)
-					continue
+					if ev.Status == "preview" {
+						rids = append(rids, efid)
+					}
 				}
 				continue
 			}
@@ -78,6 +79,29 @@ func GetEventFileIDsAllowedDownload(reqUserID uint32, reqRole string, efids []ui
 		}
 	}
 	return rids
+}
+
+func GetEventFileIDsAllowedAccept(reqUserID uint32, reqRole string, efids []uint32) []uint32 {
+	rids := make([]uint32, 0, len(efids))
+	if reqRole == "editor" {
+		return rids
+	}
+	for _, efid := range efids {
+		if ef, ev, _, _, err := GetFileEventOwnerUserFromOriginalFileID(efid); err == nil {
+			if ef.Status == "preview" && reqUserID == ev.UserID {
+				rids = append(rids, efid)
+				// // get the actual proposal file, not the preview one
+				// if af, err := EventFileGetProposal(ef); err == nil {
+				// 	rids = append(rids, af.ID)
+				// }
+			}
+		}
+	}
+	return rids
+}
+
+func GetEventFileIDsAllowedReject(reqUserID uint32, reqRole string, efids []uint32) []uint32 {
+	return GetEventFileIDsAllowedAccept(reqUserID, reqRole, efids)
 }
 
 func GetFileEventOwnerUserFromOriginalFileID(id uint32) (ef EventFile, ev Event, ou User, us User, err error) {

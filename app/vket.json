@@ -37,5 +37,10 @@
 	    "Port": 3306,
 	    "Parameter": "?parseTime=true"
 	}
+    },
+    "View": {
+        "Debug": 1,
+        "Dir": "/Users/valeriug/dev/go/src/github.com/valeriugold/vket/app/vviews/vtemplates",
+        "BaseTmpl": "base"
     }
 }

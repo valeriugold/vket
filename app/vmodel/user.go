@@ -83,3 +83,16 @@ func UserDelete(email string) error {
 
 	return standardizeError(err)
 }
+
+func UserDeleteByID(id uint32) error {
+	var err error
+
+	switch database.ReadConfig().Type {
+	case database.TypeMySQL:
+		_, err = database.SQL.Exec("DELETE FROM user WHERE ID = ? LIMIT 1", id)
+	default:
+		err = ErrCode
+	}
+
+	return standardizeError(err)
+}

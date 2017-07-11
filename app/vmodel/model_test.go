@@ -98,7 +98,7 @@ func TestUser(t *testing.T) {
 	t.Logf("expected error retriving deleted user %s, err: %v\n", tu.Email, err)
 }
 
-func TestEventFile(t *testing.T) {
+func prepareDBUserEvent(t *testing.T) (User, Event) {
 	// Connect to database
 	database.Connect(configDb)
 
@@ -107,7 +107,6 @@ func TestEventFile(t *testing.T) {
 	if err := UserCreate(tu.FirstName, tu.LastName, tu.Email, tu.Password, tu.Role); err != nil {
 		t.Errorf("create user err: %v", err)
 	}
-	defer UserDelete(tu.Email)
 	// retrive user
 	tur, err := UserByEmail(tu.Email)
 	if err != nil {
@@ -119,48 +118,143 @@ func TestEventFile(t *testing.T) {
 	if err := EventCreate(tur.ID, teName); err != nil {
 		t.Errorf("create event err: %v", err)
 	}
-	defer EventDelete(tur.ID, teName)
 	// retrive event
-	x, err := EventGetByUserIDName(tur.ID, teName)
+	ev, err := EventGetByUserIDName(tur.ID, teName)
 	if err != nil {
 		t.Errorf("retriving events %d, err: %v\n", tur.ID, err)
 	}
 
-	// add user file
-	tuf := EventFile{EventID: x.ID, OwnerID: tur.ID, Name: "testUFname", StoredFileID: 1}
-	if err = EventFileCreate(tuf.EventID, tur.ID, "original", tuf.Name, tuf.StoredFileID); err != nil {
+	return tur, ev
+}
+
+func cleanupDBUserEvent(us User, ev Event) {
+	EventGetByEventID(ev.ID)
+	UserDeleteByID(us.ID)
+}
+
+func createEventFile(t *testing.T, ev Event, usID uint32, status string, sfid uint32) EventFile {
+	// add event file
+	tuf := EventFile{EventID: ev.ID, OwnerID: usID, Name: "testUFname", StoredFileID: sfid}
+	if err := EventFileCreate(tuf.EventID, usID, status, tuf.Name, tuf.StoredFileID); err != nil {
 		t.Errorf("err creating event_file %v, err: %v", tuf, err)
 	}
-	defer EventFileDelete(tuf.EventID, tur.ID, tuf.Name)
 
-	// retrieve user file
-	uf, err := EventFileGetByEventIDOwnerIDName(tuf.EventID, tur.ID, tuf.Name)
+	// retrieve event file
+	ef, err := EventFileGetByEventIDOwnerIDName(tuf.EventID, usID, tuf.Name)
 	if err != nil {
 		t.Errorf("err getting event_file (%d, %s), err: %v", tuf.EventID, tuf.Name, err)
 	}
 
 	// check tuf == uf
-	if tuf.EventID != uf.EventID || tuf.Name != uf.Name {
-		t.Errorf("what was gotten %v is not what was set %v", uf, tuf)
+	if tuf.EventID != ef.EventID || tuf.Name != ef.Name {
+		t.Errorf("what was gotten %v is not what was set %v", ef, tuf)
 	}
+	return ef
+}
+
+func TestEventFile(t *testing.T) {
+	f := StoredFile{Name: "testStoredNamex",
+		Size: 12345678,
+		Md5:  "AA345678901234567890123456789011"}
+	// create and retrieve stored file
+	sf, err := StoredFileCreate(f.Name, f.Size, f.Md5)
+	if err != nil {
+		t.Errorf("creating stored file %s, %d, %s, err: %v\n", f.Name, f.Size, f.Md5, err)
+	}
+	defer StoredFileDeleteByID(sf.ID)
+
+	us, ev := prepareDBUserEvent(t)
+	defer cleanupDBUserEvent(us, ev)
+
+	t.Logf("event = %v\n", ev)
+	// add event file
+	deleteEventFile := true
+	ef := createEventFile(t, ev, us.ID, "original", sf.ID)
+	defer func() {
+		if deleteEventFile {
+			EventFileDelete(ef.EventID, us.ID, ef.Name)
+		}
+	}()
 
 	// try to add same user_file again
-	if err = EventFileCreate(tuf.EventID, tur.ID, "original", tuf.Name, tuf.StoredFileID); err == nil {
-		t.Errorf("no err creating duplicate event_file %v", tuf)
+	err = EventFileCreate(ef.EventID, us.ID, "original", ef.Name, ef.StoredFileID)
+	if err == nil {
+		t.Errorf("no err creating duplicate event_file %v", ef)
+		//os.Exit(1)
 	}
 	t.Logf("expected error creating duplicate event_file, err: %v", err)
 
 	// delete event_file
-	if err = EventFileDelete(tuf.EventID, tur.ID, tuf.Name); err != nil {
-		t.Errorf("deleting event_file (%d, %s), err: %v\n", tuf.EventID, tuf.Name, err)
+	if err = EventFileDelete(ef.EventID, us.ID, ef.Name); err != nil {
+		t.Errorf("deleting event_file (%d, %s), err: %v\n", ef.EventID, ef.Name, err)
 	}
+	deleteEventFile = false
 
 	// try retrieve deleted event file
-	_, err = EventFileGetByEventIDOwnerIDName(tuf.EventID, tur.ID, tuf.Name)
+	_, err = EventFileGetByEventIDOwnerIDName(ef.EventID, us.ID, ef.Name)
 	if err == nil {
 		t.Errorf("no error on getting deleted event_file")
 	}
 	t.Logf("expected error retriving deleted event_file err: %v\n", err)
+}
+
+func TestEventFilePreview(t *testing.T) {
+	us, ev := prepareDBUserEvent(t)
+	defer cleanupDBUserEvent(us, ev)
+
+	f := StoredFile{Name: "testStoredNameO",
+		Size: 12345678,
+		Md5:  "AA345678901234567890123456789014"}
+	// create and retrieve stored file
+	sf, err := StoredFileCreate(f.Name, f.Size, f.Md5)
+	if err != nil {
+		t.Errorf("creating stored file %s, %d, %s, err: %v\n", f.Name, f.Size, f.Md5, err)
+	}
+	defer StoredFileDeleteByID(sf.ID)
+
+	var editorID uint32 = 1
+
+	deleteEventFile := true
+	ef := createEventFile(t, ev, editorID, "proposal", sf.ID)
+	defer func() {
+		if deleteEventFile {
+			EventFileDelete(ef.EventID, us.ID, ef.Name)
+		}
+	}()
+
+	fp := StoredFile{Name: "testStoredNameP",
+		Size: 12345678,
+		Md5:  "AA345678901234567890123456789015"}
+	// create and retrieve stored file
+	sfp, err := StoredFileCreate(fp.Name, fp.Size, fp.Md5)
+	if err != nil {
+		t.Errorf("creating stored file %s, %d, %s, err: %v\n", fp.Name, fp.Size, fp.Md5, err)
+	}
+	defer StoredFileDeleteByID(sfp.ID)
+
+	// retrieve preview file
+	if err := EventFileCreatePreview(ev.ID, editorID, ef.Name, sfp.ID); err != nil {
+		t.Errorf("Err on EventFileCreatePreview(%d, %d, %s, %d): %v", ev.ID, editorID, ef.Name, sf.ID, err)
+	}
+
+	// get preview
+	pr, err := EventFileGetPreview(ef)
+	if err != nil {
+		t.Errorf("on EventFileGetPreview(%v), err=%v", ef, err)
+	}
+	defer EventFileDeleteByID(pr.ID)
+
+	// delete event file, should delete preview as well
+	if err = EventFileAcceptPreviewID(pr.ID); err != nil {
+		t.Errorf("EventFileAcceptPreviewID(%d), err: %v\n", pr.ID, err)
+	}
+
+	// check that preview file is gone
+	_, err = EventFileGetByEventFileID(pr.ID)
+	if err == nil {
+		t.Errorf("no error on getting deleted preview event_file")
+	}
+	t.Logf("expected error retriving deleted preview event_file err: %v\n", err)
 }
 
 func TestStoredFile(t *testing.T) {

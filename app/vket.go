@@ -52,8 +52,9 @@ type configuration struct {
 	// Email     email.SMTPInfo  `json:"Email"`
 	// Recaptcha recaptcha.Info  `json:"Recaptcha"`
 	// Server   server.Server   `json:"Server"`
-	Server Configuration      `json:"Server"`
-	Log    vlog.Configuration `json:"Log"`
+	Server Configuration        `json:"Server"`
+	Log    vlog.Configuration   `json:"Log"`
+	View   vviews.Configuration `json:"View"`
 	// VFiles vfiles.Configuration `json:"VFiles"`
 	// Session  session.Session `json:"Session"`
 	// Template view.Template   `json:"Template"`
@@ -122,7 +123,7 @@ func main() {
 	// vr := vmodel.New()
 	// vs := vs3.New()
 
-	vviews.Init()
+	vviews.InitConfiguration(config.View)
 	stdChain := alice.New(loggingSetter(os.Stdout))
 
 	//static file handler
@@ -276,6 +277,26 @@ func FilesOpPOST(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
+				} else if a[0] == "accept" {
+					// get the slice on which the operation is allowed
+					acfids := vmodel.GetEventFileIDsAllowedAccept(vsess.UserID, vsess.Role, efids)
+					vlog.Info.Printf("Accept files (preview) id %v", acfids)
+					for _, efid := range acfids {
+						vlog.Info.Printf("accept event file ID =%d", efid)
+						vmodel.EventFileAcceptPreviewID(efid)
+					}
+					// show the files page
+					RunDisplayFiles(w, ev, vsess)
+				} else if a[0] == "reject" {
+					// get the slice on which the operation is allowed
+					acfids := vmodel.GetEventFileIDsAllowedReject(vsess.UserID, vsess.Role, efids)
+					vlog.Info.Printf("Reject files (preview) id %v", acfids)
+					for _, efid := range acfids {
+						vlog.Info.Printf("accept event file ID =%d", efid)
+						vmodel.EventFileRejectPreviewID(efid)
+					}
+					// show the files page
+					RunDisplayFiles(w, ev, vsess)
 				}
 			}
 		}
