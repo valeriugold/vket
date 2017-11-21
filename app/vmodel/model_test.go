@@ -1,6 +1,7 @@
 package vmodel
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/valeriugold/vket/app/shared/database"
@@ -134,7 +135,7 @@ func cleanupDBUserEvent(us User, ev Event) {
 
 func createEventFile(t *testing.T, ev Event, usID uint32, status string, sfid uint32) EventFile {
 	// add event file
-	tuf := EventFile{EventID: ev.ID, OwnerID: usID, Name: "testUFname", StoredFileID: sfid}
+	tuf := EventFile{EventID: ev.ID, OwnerID: usID, Name: fmt.Sprintf("testUFname-%d", sfid), StoredFileID: sfid}
 	if err := EventFileCreate(tuf.EventID, usID, status, tuf.Name, tuf.StoredFileID); err != nil {
 		t.Errorf("err creating event_file %v, err: %v", tuf, err)
 	}
@@ -152,16 +153,49 @@ func createEventFile(t *testing.T, ev Event, usID uint32, status string, sfid ui
 	return ef
 }
 
-func TestEventFile(t *testing.T) {
-	f := StoredFile{Name: "testStoredNamex",
-		Size: 12345678,
-		Md5:  "AA345678901234567890123456789011"}
-	// create and retrieve stored file
-	sf, err := StoredFileCreate(f.Name, f.Size, f.Md5)
-	if err != nil {
-		t.Errorf("creating stored file %s, %d, %s, err: %v\n", f.Name, f.Size, f.Md5, err)
+type storedFiles struct {
+	sfs []StoredFile
+}
+
+func (s *storedFiles) clean() {
+	for _, sf := range s.sfs {
+		StoredFileDeleteByID(sf.ID)
 	}
-	defer StoredFileDeleteByID(sf.ID)
+}
+
+func createStoredFiles(count int) (storedFiles, error) {
+	s := storedFiles{}
+	for i := 0; i < count; i++ {
+		f := StoredFile{Name: fmt.Sprintf("testStoredNamex%d", i),
+			Size: int64(12345000 + i),
+			Md5:  fmt.Sprintf("AA345678901234567890123456789%.3d", i%1000)}
+		sf, err := StoredFileCreate(f.Name, f.Size, f.Md5)
+		if err != nil {
+			s.clean()
+			// t.Errorf("creating stored file %s, %d, %s, err: %v\n", f.Name, f.Size, f.Md5, err)
+			return s, err
+		}
+		s.sfs = append(s.sfs, sf)
+	}
+	return s, nil
+}
+
+func TestEventFile(t *testing.T) {
+	s, err := createStoredFiles(1)
+	if err != nil {
+		t.Errorf("createStoredFiles error: %v", err)
+	}
+	defer s.clean()
+	sf := s.sfs[0]
+	// f := StoredFile{Name: "testStoredNamex",
+	// 	Size: 12345678,
+	// 	Md5:  "AA345678901234567890123456789011"}
+	// // create and retrieve stored file
+	// sf, err := StoredFileCreate(f.Name, f.Size, f.Md5)
+	// if err != nil {
+	// 	t.Errorf("creating stored file %s, %d, %s, err: %v\n", f.Name, f.Size, f.Md5, err)
+	// }
+	// defer StoredFileDeleteByID(sf.ID)
 
 	us, ev := prepareDBUserEvent(t)
 	defer cleanupDBUserEvent(us, ev)
@@ -322,4 +356,71 @@ func TestStoredFile(t *testing.T) {
 	} else {
 		t.Logf("expected error getting deleted file err: %v", err)
 	}
+}
+
+func TestEditorEvent(t *testing.T) {
+	// create users, event
+	us, ev := prepareDBUserEvent(t)
+	defer cleanupDBUserEvent(us, ev)
+
+	// create files
+	s, err := createStoredFiles(5)
+	if err != nil {
+		t.Errorf("createStoredFiles error: %v", err)
+	}
+	defer s.clean()
+
+	// create event files
+	deleteEventFile := true
+	efs := make([]EventFile, len(s.sfs))
+	for i, sf := range s.sfs {
+		efs[i] = createEventFile(t, ev, us.ID, "original", sf.ID)
+	}
+	defer func() {
+		if deleteEventFile {
+			for _, ef := range efs {
+				EventFileDelete(ef.EventID, us.ID, ef.Name)
+			}
+		}
+	}()
+
+	// confirm there is editor 1 added to the event (by default)
+	ee, err := EditorEventGetByEditorEventID(1, ev.ID)
+	if err != nil {
+		t.Error("err from EditorEventGetByEditorEventID:", err)
+	}
+	t.Logf("ee = %v", ee)
+
+	// add files to EditorEvent
+	efids := make([]uint32, len(efs))
+	for i, v := range efs {
+		efids[i] = v.ID
+	}
+	price := CalculatePrice(ev, efids)
+	if err = EditorEventCreate(1, ev.ID, price, "instructions,,,", efids); err != nil {
+		t.Error("err from EditorEventCreate:", err)
+	}
+	defer func() {
+		EditorEventFileDeleteAllByEditorEventID(ee.ID)
+		EditorEventDeleteByID(ee.ID)
+	}()
+
+	// display ee and eef
+	eeGet, err := EditorEventGetByEditorEventID(1, ev.ID)
+	if err != nil {
+		t.Error("err from EditorEventGetByEditorEventID:", err)
+	}
+	t.Logf("eeGet = %v", eeGet)
+	efidsGet, err := EditorEventFileGetEFIDs(eeGet.ID)
+	if err != nil {
+		t.Error("err from EditorEventGetByEditorEventID:", err)
+	}
+	for _, efid := range efidsGet {
+		ef, err := EventFileGetByEventFileID(efid)
+		if err != nil {
+			t.Error("err from EditorEventGetByEditorEventID:", err)
+		}
+		t.Logf("efGet = %v", ef)
+	}
+	t.Logf("efidsGet = %v", efidsGet)
 }

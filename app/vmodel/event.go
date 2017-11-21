@@ -87,7 +87,7 @@ func EventCreate(userID uint32, name string) error {
 	// automatically add all events to editor id 1
 	if err == nil {
 		if ev, err := EventGetByUserIDName(userID, name); err == nil {
-			EditorEventCreate(1, ev.ID)
+			EditorEventCreate(1, ev.ID, 0, "added automatically", []uint32{})
 		}
 	}
 

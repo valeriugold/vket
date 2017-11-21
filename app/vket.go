@@ -277,6 +277,17 @@ func FilesOpPOST(w http.ResponseWriter, r *http.Request) {
 						http.Error(w, err.Error(), http.StatusInternalServerError)
 						return
 					}
+				} else if a[0] == "price" {
+					// compute the total price of the selected files
+					price := vmodel.CalculatePrice(ev, efids)
+					// todo: show page with submission confirmation, maybe chose editor
+					// store the price together with the editor for this job
+					if err := vmodel.EditorEventCreate(1, ev.ID, price, "instructions,,,", efids); err != nil {
+						vlog.Warning.Printf("could not create the editor event, err=%v", err)
+						http.Error(w, err.Error(), http.StatusInternalServerError)
+						return
+					}
+
 				} else if a[0] == "accept" {
 					// get the slice on which the operation is allowed
 					acfids := vmodel.GetEventFileIDsAllowedAccept(vsess.UserID, vsess.Role, efids)

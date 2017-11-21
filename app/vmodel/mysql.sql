@@ -105,6 +105,8 @@ CREATE TABLE editor_event (
 
     editor_id INT(10) UNSIGNED NOT NULL,
     event_id INT(10) UNSIGNED NOT NULL,
+    price INT(10) UNSIGNED NOT NULL,
+    instructions TEXT NOT NULL,
     status ENUM('open', 'closed') NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -113,6 +115,22 @@ CREATE TABLE editor_event (
     CONSTRAINT `f_editor_event_event` FOREIGN KEY (`event_id`) REFERENCES `event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
 
     UNIQUE KEY (editor_id, event_id),
+    PRIMARY KEY (id)
+);
+
+drop table if exists editor_event_file;
+CREATE TABLE editor_event_file (
+    id INT(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+
+    editor_event_id INT(10) UNSIGNED NOT NULL,
+    event_file_id INT(10) UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT `f_editor_event_file_editor_event` FOREIGN KEY (`editor_event_id`) REFERENCES `editor_event` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+    CONSTRAINT `f_editor_event_file_event_file` FOREIGN KEY (`event_file_id`) REFERENCES `event_file` (`id`) ON DELETE CASCADE ON UPDATE CASCADE,
+
+    /* UNIQUE KEY (editor_event_id), */
     PRIMARY KEY (id)
 );
 

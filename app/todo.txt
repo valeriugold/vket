@@ -72,3 +72,73 @@ event files
 Where to upload edited_files
 event files for editors: editors should be able to open events that don't belong to them; open from menu...
 needs eventID
+
+
+High level steps:
+build first prototype
+test, evaluate from functional point of view
+reiterate, fix
+port to mobile: is it really needed?
+android - Possible outsource
+IOS - Possible outsource
+Windows - Possible outsource
+test, evaluate
+rework, fix
+beautify, more user friendly - possible outsource
+fill disclaimers, policies, license
+
+--- almost ready to launch !!!
+
+setup initial content
+beta testing
+promote, gather users
+partners
+
+
+second prototype:
+multiple editors, rating, comments
+integrate, test, fix
+partener with editors
+
+
+Tasks:
+develop code
+find development help for code
+create company
+
+
+Features (high level):
+support getting payed - as diverse as possible - VG:20h - Possible outsource, after a little more thought
+support paying editors - VG: 20h
+support multiple editors - VG: 20h
+keep records about payments - VG: 10h
+editor feedback, allow users to choose - VG: 20h
+determine price based on user materrial, editor rate - VG: 20h?
+user management, pass change, forget pass, emails - VG: 20h
+recommend to friend - VG: 8h
+invite friends to upload content anonymous, without necessary joining: email VG: 4h, SMS VG: 16h, facebook?, other?
+transcode movies, automatically add watermarks?
+decide what to do with finished, payed, edited content: keep, download, add to another cloud?
+management view with summaries about users, editors, income, used spaces, all possible metrics VG: 20h
+mechanism to report unlawful content AZ: 8h, VG: 8h
+mechanism to clean up orphaned files, health check, and other problems VG: 16h
+setup backup, redundancy VG: 8h
+port to Android VG: ?
+port to IOS VG: ?
+port to Windows VG: ?
+allow comments, even with unique editor VG: 8h
+transcode file to allow view with watermark - VG: 8h - Possible outsource
+
+second release:
+refine editor access
+multiple editors
+add ratings, comments
+
+
+Din pacate nu pot raspunde cu aceeasi moneda pt ca nu pot scrie atat de mult.
+Te rog sintetizeaza lucrurile practice in ultimul paragraf, ca sa nu mai citesc pagini intregi de inventii si ura.
+
+Ignor pagini intregi de inventii si ura.xc
+Ultima oara repet: inscrierea la WASC e anuala, poti sa o inscrii linistita.
+Incepand cu 8 sep suntem gata. Multumesc ca ai inteles.
+Eu inca nu am inteles cand vrei tu. Un rand e suficient. Multumesc.
